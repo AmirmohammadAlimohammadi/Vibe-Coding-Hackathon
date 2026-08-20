@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
+from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.database import close_database, initialize_database
 from app.retrieval.api import RagQueryRequest, RagQueryResponse, serialize_rag_result
@@ -26,7 +29,9 @@ app = FastAPI(
     description="Backend API for the hosting assistant chatbot.",
     version="0.1.0",
     lifespan=lifespan,
+    swagger_ui_parameters={"persistAuthorization": True},
 )
+app.include_router(auth_router)
 app.include_router(chat_router)
 
 
@@ -41,7 +46,10 @@ async def root() -> dict[str, str]:
 
 
 @app.post("/rag/query", response_model=RagQueryResponse, tags=["rag"])
-def query_documentation(request: RagQueryRequest) -> RagQueryResponse:
+def query_documentation(
+    request: RagQueryRequest,
+    _: User = Depends(get_current_user),
+) -> RagQueryResponse:
     try:
         service = get_rag_service()
         state = service.query(request.question, request.max_refinements)

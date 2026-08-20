@@ -117,3 +117,32 @@ For each new turn, the backend loads recent messages from the selected chat, rew
 context-dependent follow-up questions into standalone retrieval queries, and gives the
 conversation history to the grading and answer-generation steps. The memory window is
 bounded by `CHAT_MEMORY_MESSAGES` and `CHAT_MEMORY_MAX_CHARS`.
+
+## Email OTP authentication
+
+Users authenticate with their email address only. OTP codes are HMAC-protected in Redis,
+expire after five minutes, are single-use, and are limited by email address and client IP.
+Configure the `AUTH_*`, `OTP_*`, and `SMTP_*` values from `backend/.env.example` before
+using the authentication endpoints:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Run the command twice and use separate values for `AUTH_TOKEN_SECRET` and
+`OTP_HASH_SECRET`.
+
+```text
+POST /auth/email/request
+POST /auth/email/verify
+GET  /auth/me
+```
+
+The verification endpoint creates the user automatically on their first successful code
+verification and returns a bearer access token. Use that token in the `Authorization`
+header as `Bearer <token>`. Chat and stateless RAG endpoints require authentication, and
+all chat queries are scoped to the authenticated user so returning users see their own
+history only.
+
+For local testing without an SMTP provider, explicitly set `EMAIL_DELIVERY_MODE=console`.
+This logs OTP codes and must not be enabled in production.

@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -11,6 +11,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+if TYPE_CHECKING:
+    from app.auth.models import User
 
 
 class MessageRole(str, enum.Enum):
@@ -26,6 +30,15 @@ class Chat(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+            name="fk_chats_user_id_users",
+        ),
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(200), default="New chat")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -36,6 +49,7 @@ class Chat(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    user: Mapped[User | None] = relationship(back_populates="chats")
     messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="chat",
         cascade="all, delete-orphan",

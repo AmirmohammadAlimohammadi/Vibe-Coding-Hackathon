@@ -7,6 +7,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 from app.chat import repository
 from app.chat.models import MessageRole
 from app.chat.schemas import (
@@ -30,9 +32,10 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 @router.post("", response_model=ChatSummaryResponse, status_code=status.HTTP_201_CREATED)
 def create_chat(
     request: ChatCreateRequest,
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> ChatSummaryResponse:
-    chat = repository.create_chat(session, request.title)
+    chat = repository.create_chat(session, current_user.id, request.title)
     return ChatSummaryResponse.model_validate(chat)
 
 
@@ -40,6 +43,7 @@ def create_chat(
 def list_chats(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> list[ChatSummaryResponse]:
     return [
@@ -52,6 +56,7 @@ def list_chats(
         )
         for chat, message_count in repository.list_chats(
             session,
+            current_user.id,
             limit=limit,
             offset=offset,
         )
@@ -61,9 +66,10 @@ def list_chats(
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
 def get_chat(
     chat_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> ChatDetailResponse:
-    chat = repository.get_chat(session, chat_id)
+    chat = repository.get_chat(session, current_user.id, chat_id)
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
     return ChatDetailResponse(
@@ -79,9 +85,10 @@ def get_chat(
 def rename_chat(
     chat_id: uuid.UUID,
     request: ChatUpdateRequest,
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> ChatSummaryResponse:
-    chat = repository.rename_chat(session, chat_id, request.title)
+    chat = repository.rename_chat(session, current_user.id, chat_id, request.title)
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
     return ChatSummaryResponse.model_validate(chat)
@@ -90,9 +97,10 @@ def rename_chat(
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_chat(
     chat_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> Response:
-    if not repository.delete_chat(session, chat_id):
+    if not repository.delete_chat(session, current_user.id, chat_id):
         raise HTTPException(status_code=404, detail="Chat not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -101,19 +109,22 @@ def delete_chat(
 def send_message(
     chat_id: uuid.UUID,
     request: ChatMessageRequest,
+    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_database_session),
 ) -> ChatTurnResponse:
-    if not repository.chat_exists(session, chat_id):
+    if not repository.chat_exists(session, current_user.id, chat_id):
         raise HTTPException(status_code=404, detail="Chat not found")
 
     history = repository.get_chat_memory(
         session,
+        current_user.id,
         chat_id,
         limit=int(os.getenv("CHAT_MEMORY_MESSAGES", "20")),
         max_chars=int(os.getenv("CHAT_MEMORY_MAX_CHARS", "16000")),
     )
     user_message = repository.append_message(
         session,
+        current_user.id,
         chat_id,
         MessageRole.USER,
         request.question,
@@ -138,6 +149,7 @@ def send_message(
 
     assistant_message = repository.append_message(
         session,
+        current_user.id,
         chat_id,
         MessageRole.ASSISTANT,
         rag.answer,

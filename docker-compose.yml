@@ -11,6 +11,15 @@ services:
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: liara_documentation_hybrid
       RAG_MODEL: gpt-5.6-terra
+      EMAIL_DELIVERY_MODE: smtp
+      SMTP_HOST: smtp-ir-01.runflare.com
+      SMTP_PORT: 465
+      SMTP_USERNAME: noreply@amirmohammadalimohammadi.ir
+      SMTP_FROM_EMAIL: noreply@amirmohammadalimohammadi.ir
+      SMTP_FROM_NAME: Liara Assistant
+      SMTP_USE_TLS: "false"
+      SMTP_USE_SSL: "true"
+      SMTP_TIMEOUT_SECONDS: 15
     ports:
       - "8000:8000"
     depends_on:

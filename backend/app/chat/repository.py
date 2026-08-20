@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.chat.models import Chat, ChatMessage, MessageRole
 
 
-def create_chat(session: Session, title: str | None = None) -> Chat:
-    chat = Chat(title=(title or "New chat").strip() or "New chat")
+def create_chat(session: Session, user_id: uuid.UUID, title: str | None = None) -> Chat:
+    chat = Chat(
+        user_id=user_id,
+        title=(title or "New chat").strip() or "New chat",
+    )
     session.add(chat)
     session.commit()
     session.refresh(chat)
@@ -19,6 +22,7 @@ def create_chat(session: Session, title: str | None = None) -> Chat:
 
 def list_chats(
     session: Session,
+    user_id: uuid.UUID,
     *,
     limit: int,
     offset: int,
@@ -31,6 +35,7 @@ def list_chats(
     )
     statement = (
         select(Chat, message_count.label("message_count"))
+        .where(Chat.user_id == user_id)
         .order_by(Chat.updated_at.desc(), Chat.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -38,21 +43,33 @@ def list_chats(
     return list(session.execute(statement).all())
 
 
-def get_chat(session: Session, chat_id: uuid.UUID) -> Chat | None:
+def get_chat(session: Session, user_id: uuid.UUID, chat_id: uuid.UUID) -> Chat | None:
     statement = (
         select(Chat)
-        .where(Chat.id == chat_id)
+        .where(Chat.id == chat_id, Chat.user_id == user_id)
         .options(selectinload(Chat.messages))
     )
     return session.scalar(statement)
 
 
-def chat_exists(session: Session, chat_id: uuid.UUID) -> bool:
-    return session.scalar(select(Chat.id).where(Chat.id == chat_id)) is not None
+def chat_exists(session: Session, user_id: uuid.UUID, chat_id: uuid.UUID) -> bool:
+    return (
+        session.scalar(
+            select(Chat.id).where(Chat.id == chat_id, Chat.user_id == user_id)
+        )
+        is not None
+    )
 
 
-def rename_chat(session: Session, chat_id: uuid.UUID, title: str) -> Chat | None:
-    chat = session.get(Chat, chat_id)
+def rename_chat(
+    session: Session,
+    user_id: uuid.UUID,
+    chat_id: uuid.UUID,
+    title: str,
+) -> Chat | None:
+    chat = session.scalar(
+        select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    )
     if chat is None:
         return None
     chat.title = title.strip()
@@ -62,8 +79,10 @@ def rename_chat(session: Session, chat_id: uuid.UUID, title: str) -> Chat | None
     return chat
 
 
-def delete_chat(session: Session, chat_id: uuid.UUID) -> bool:
-    chat = session.get(Chat, chat_id)
+def delete_chat(session: Session, user_id: uuid.UUID, chat_id: uuid.UUID) -> bool:
+    chat = session.scalar(
+        select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    )
     if chat is None:
         return False
     session.delete(chat)
@@ -73,12 +92,17 @@ def delete_chat(session: Session, chat_id: uuid.UUID) -> bool:
 
 def append_message(
     session: Session,
+    user_id: uuid.UUID,
     chat_id: uuid.UUID,
     role: MessageRole,
     content: str,
     details: dict | None = None,
 ) -> ChatMessage | None:
-    chat = session.scalar(select(Chat).where(Chat.id == chat_id).with_for_update())
+    chat = session.scalar(
+        select(Chat)
+        .where(Chat.id == chat_id, Chat.user_id == user_id)
+        .with_for_update()
+    )
     if chat is None:
         return None
 
@@ -103,6 +127,7 @@ def append_message(
 
 def get_chat_memory(
     session: Session,
+    user_id: uuid.UUID,
     chat_id: uuid.UUID,
     *,
     limit: int,
@@ -110,7 +135,8 @@ def get_chat_memory(
 ) -> list[dict[str, str]]:
     statement = (
         select(ChatMessage)
-        .where(ChatMessage.chat_id == chat_id)
+        .join(Chat, Chat.id == ChatMessage.chat_id)
+        .where(ChatMessage.chat_id == chat_id, Chat.user_id == user_id)
         .order_by(ChatMessage.position.desc())
         .limit(limit)
     )
