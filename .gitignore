@@ -1,3 +1,9 @@
+# Node / Vite
+node_modules/
+dist/
+.vite/
+.turbo/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
