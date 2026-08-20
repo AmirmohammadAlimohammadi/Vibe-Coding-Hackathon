@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/vazirmatn";
 
 @custom-variant dark (&:is(.dark *));
 @source "../../../apps/**/*.{ts,tsx}";
@@ -48,7 +48,7 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: "Vazirmatn", sans-serif;
 }
 
 :root {
@@ -125,6 +125,119 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
-    }
+    @apply bg-background font-sans text-foreground;
+  }
+}
+
+@keyframes starfield-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-1.2vw, 1.5vh, 0);
+  }
+}
+
+@keyframes starfield-twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes starfield-shoot {
+  0%,
+  76% {
+    opacity: 0;
+    transform: rotate(-38deg) translateX(0);
+  }
+  78% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 0;
+    transform: rotate(-38deg) translateX(42vw);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-38deg) translateX(42vw);
+  }
+}
+
+.starfield {
+  isolation: isolate;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 48% -14%, rgb(82 96 207 / 32%), transparent 37%),
+    radial-gradient(circle at 8% 98%, rgb(37 190 186 / 13%), transparent 33%),
+    linear-gradient(145deg, #080c2a 0%, #070b20 52%, #050719 100%);
+}
+
+.starfield__glow {
+  position: absolute;
+  inset: -14%;
+  opacity: 0.58;
+  background:
+    radial-gradient(ellipse at center, rgb(117 131 255 / 18%), transparent 54%),
+    radial-gradient(ellipse at 74% 68%, rgb(103 232 216 / 8%), transparent 38%);
+  filter: blur(12px);
+}
+
+.starfield__stars {
+  position: absolute;
+  inset: -4%;
+  animation: starfield-drift 32s ease-in-out infinite;
+}
+
+.starfield__star {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  background: #f8fbff;
+  box-shadow: 0 0 7px rgb(184 201 255 / 85%);
+  animation-name: starfield-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.starfield__shooting-star {
+  position: absolute;
+  width: min(22vw, 260px);
+  height: 1px;
+  opacity: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #fff, rgb(222 231 255 / 0%));
+  box-shadow: 0 0 8px rgb(255 255 255 / 60%);
+  animation-name: starfield-shoot;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.starfield__shooting-star::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 14px 4px rgb(223 234 255 / 85%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starfield__stars,
+  .starfield__star,
+  .starfield__shooting-star {
+    animation: none;
+  }
 }
