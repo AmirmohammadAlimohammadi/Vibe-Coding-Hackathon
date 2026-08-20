@@ -1,145 +1,247 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
+  LoaderCircle,
+  LogOut,
   Menu,
   MessageSquare,
   Moon,
   Plus,
   Sparkles,
   Sun,
+  UserRound,
   X,
 } from "lucide-react"
 
+import { LoginScreen } from "@/components/auth/login-screen"
+import { useTheme } from "@/components/theme-provider"
 import AIChatCard, { type ChatMessage } from "@/components/ui/ai-chat"
 import { StarfieldBackground } from "@/components/ui/starfield-background"
-import { useTheme } from "@/components/theme-provider"
+import {
+  ACCESS_TOKEN_STORAGE_KEY,
+  ApiError,
+  createChat,
+  getChat,
+  getCurrentUser,
+  listChats,
+  sendChatMessage,
+  type AuthSession,
+  type ChatMessageRecord,
+} from "@/lib/api"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ChatHistory = {
   id: string
   title: string
   messages: ChatMessage[]
+  loaded: boolean
 }
 
-const INITIAL_MESSAGES: ChatMessage[] = [
-  {
-    sender: "ai",
-    text: "👋 سلام! من دستیار هوشمند لیارا هستم. چطور می‌توانم کمکتان کنم؟",
-  },
-]
+const WELCOME_MESSAGE: ChatMessage = {
+  id: "welcome",
+  sender: "ai",
+  text: "👋 سلام! من دستیار هوشمند لیارا هستم. چطور می‌توانم کمکتان کنم؟",
+}
 
-function createDraftChat(): ChatHistory {
+function mapMessage(message: ChatMessageRecord): ChatMessage {
   return {
-    id: `draft-${Date.now()}`,
-    title: "گفتگوی جدید",
-    messages: [...INITIAL_MESSAGES],
+    id: message.id,
+    sender: message.role === "assistant" ? "ai" : "user",
+    text: message.content,
   }
 }
 
 function getPreview(messages: ChatMessage[]) {
-  return messages[messages.length - 1]?.text ?? "No messages yet"
+  const lastMessage = messages[messages.length - 1]
+  return lastMessage && lastMessage.id !== "welcome"
+    ? lastMessage.text
+    : "برای مشاهده گفتگو انتخاب کنید"
 }
 
-function getTitle(messages: ChatMessage[]) {
-  const firstUserMessage = messages.find((message) => message.sender === "user")
+function getTitle(message: string) {
+  return message.length > 34 ? `${message.slice(0, 34)}…` : message
+}
 
-  if (!firstUserMessage) {
-    return "گفتگوی جدید"
+function messageFromError(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.message
   }
-
-  return firstUserMessage.text.length > 28
-    ? `${firstUserMessage.text.slice(0, 28)}…`
-    : firstUserMessage.text
+  return "ارتباط با سرور برقرار نشد. دوباره تلاش کنید."
 }
 
-function hasConversation(chat: ChatHistory) {
-  return chat.messages.some((message) => message.sender === "user")
+type ChatWorkspaceProps = {
+  session: AuthSession
+  onLogout: () => void
 }
 
-export function App() {
+function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
   const { theme, setTheme } = useTheme()
   const [chats, setChats] = useState<ChatHistory[]>([])
-  const [draftChat, setDraftChat] = useState<ChatHistory | null>(
-    createDraftChat
-  )
+  const [draftMessages, setDraftMessages] = useState<ChatMessage[]>([
+    WELCOME_MESSAGE,
+  ])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const selectedChatId = activeChatId ?? draftChat?.id ?? chats[0]?.id
-  const activeChat =
-    draftChat?.id === selectedChatId
-      ? draftChat
-      : chats.find((chat) => chat.id === selectedChatId) ??
-        draftChat ??
-        chats[0]
-  const visibleChats = chats
-    .filter(hasConversation)
-    .filter(
-      (chat, index, allChats) =>
-        allChats.findIndex((candidate) => candidate.id === chat.id) === index
-    )
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleCreateChat = () => {
-    if (draftChat) {
-      setActiveChatId(draftChat.id)
-      setIsSidebarOpen(false)
+  const activeChat = useMemo(
+    () => chats.find((chat) => chat.id === activeChatId),
+    [activeChatId, chats]
+  )
+  const activeMessages = activeChat?.messages ?? draftMessages
+  const activeTitle = activeChat?.title ?? "گفتگوی جدید"
+
+  const handleApiError = (apiError: unknown) => {
+    if (apiError instanceof ApiError && apiError.status === 401) {
+      onLogout()
       return
     }
+    setError(messageFromError(apiError))
+  }
 
-    const newDraft = createDraftChat()
+  const loadChat = async (chatId: string) => {
+    const currentChat = chats.find((chat) => chat.id === chatId)
+    if (currentChat?.loaded) {
+      return
+    }
+    try {
+      const detail = await getChat(session.accessToken, chatId)
+      setChats((current) =>
+        current.map((chat) =>
+          chat.id === chatId
+            ? {
+                ...chat,
+                title: detail.title,
+                loaded: true,
+                messages: [WELCOME_MESSAGE, ...detail.messages.map(mapMessage)],
+              }
+            : chat
+        )
+      )
+    } catch (loadError) {
+      handleApiError(loadError)
+    }
+  }
 
-    setDraftChat(newDraft)
-    setActiveChatId(newDraft.id)
+  useEffect(() => {
+    let active = true
+    const loadChats = async () => {
+      try {
+        const summaries = await listChats(session.accessToken)
+        if (!active) {
+          return
+        }
+        const nextChats = summaries.map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          messages: [WELCOME_MESSAGE],
+          loaded: false,
+        }))
+        setChats(nextChats)
+        if (nextChats[0]) {
+          setActiveChatId(nextChats[0].id)
+          const detail = await getChat(session.accessToken, nextChats[0].id)
+          if (active) {
+            setChats((current) =>
+              current.map((chat) =>
+                chat.id === detail.id
+                  ? {
+                      ...chat,
+                      title: detail.title,
+                      loaded: true,
+                      messages: [WELCOME_MESSAGE, ...detail.messages.map(mapMessage)],
+                    }
+                  : chat
+              )
+            )
+          }
+        }
+      } catch (loadError) {
+        if (active) {
+          handleApiError(loadError)
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false)
+        }
+      }
+    }
+    void loadChats()
+    return () => {
+      active = false
+    }
+  }, [session.accessToken])
+
+  const handleCreateChat = () => {
+    setActiveChatId(null)
+    setDraftMessages([WELCOME_MESSAGE])
+    setError("")
     setIsSidebarOpen(false)
   }
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId)
+    setError("")
     setIsSidebarOpen(false)
+    void loadChat(chatId)
   }
 
-  const handleMessagesChange = (messages: ChatMessage[]) => {
-    if (draftChat?.id === selectedChatId) {
-      const updatedDraft: ChatHistory = {
-        ...draftChat,
-        messages,
-        title: getTitle(messages),
-      }
-
-      if (messages.some((message) => message.sender === "user")) {
-        setChats((currentChats) => {
-          const existingChat = currentChats.some(
-            (chat) => chat.id === updatedDraft.id
-          )
-
-          if (existingChat) {
-            return currentChats.map((chat) =>
-              chat.id === updatedDraft.id ? updatedDraft : chat
-            )
-          }
-
-          return [updatedDraft, ...currentChats]
-        })
-        setDraftChat(null)
-      } else {
-        setDraftChat(updatedDraft)
-      }
-
-      return
-    }
-
-    setChats((currentChats) =>
-      currentChats.map((chat) => {
-        if (chat.id !== selectedChatId) {
-          return chat
-        }
-
-        return {
-          ...chat,
-          messages,
-          title:
-            chat.title === "گفتگوی جدید" ? getTitle(messages) : chat.title,
-        }
-      })
+  const appendToChat = (chatId: string, message: ChatMessage) => {
+    setChats((current) =>
+      current.map((chat) =>
+        chat.id === chatId
+          ? { ...chat, loaded: true, messages: [...chat.messages, message] }
+          : chat
+      )
     )
+  }
+
+  const handleSendMessage = async (question: string) => {
+    setIsSending(true)
+    setError("")
+    let targetChatId = activeChatId
+    try {
+      if (!targetChatId) {
+        const optimisticMessages = [
+          ...draftMessages,
+          { sender: "user", text: question } satisfies ChatMessage,
+        ]
+        setDraftMessages(optimisticMessages)
+        const created = await createChat(session.accessToken, getTitle(question))
+        targetChatId = created.id
+        setChats((current) => [
+          {
+            id: created.id,
+            title: created.title,
+            messages: optimisticMessages,
+            loaded: true,
+          },
+          ...current,
+        ])
+        setActiveChatId(created.id)
+      } else {
+        appendToChat(targetChatId, { sender: "user", text: question })
+        setChats((current) =>
+          current.map((chat) =>
+            chat.id === targetChatId && chat.title === "New chat"
+              ? { ...chat, title: getTitle(question) }
+              : chat
+          )
+        )
+      }
+
+      const turn = await sendChatMessage(
+        session.accessToken,
+        targetChatId,
+        question
+      )
+      appendToChat(targetChatId, mapMessage(turn.assistant_message))
+    } catch (sendError) {
+      handleApiError(sendError)
+    } finally {
+      setIsSending(false)
+    }
   }
 
   return (
@@ -149,7 +251,7 @@ export function App() {
     >
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[70] flex h-svh w-[min(88vw,20rem)] shrink-0 flex-col border-r border-[#dbe2f5] bg-white text-[#152044] shadow-2xl transition-transform duration-300 dark:border-[#26366a] dark:bg-[#111c45] dark:text-white md:static md:z-auto md:h-full md:w-80 md:translate-x-0 md:border-r md:shadow-none",
+          "fixed inset-y-0 left-0 z-[70] flex h-svh w-[min(88vw,20rem)] shrink-0 flex-col border-r border-[#dbe2f5] bg-white text-[#152044] shadow-2xl transition-transform duration-300 dark:border-[#26366a] dark:bg-[#111c45] dark:text-white md:static md:z-auto md:h-full md:w-80 md:translate-x-0 md:shadow-none",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -162,90 +264,88 @@ export function App() {
               rel="noreferrer"
               target="_blank"
             >
-              <img
-                alt="لیارا"
-                className="h-7 w-auto object-contain"
-                src="https://liara.ir/assets/images/liara-logo.svg"
-              />
+              <img alt="لیارا" className="h-7 w-auto" src="https://liara.ir/assets/images/liara-logo.svg" />
             </a>
-            <div>
-              <h1 className="text-sm font-bold text-[#152044] dark:text-white">
-                دستیار هوشمند لیارا
-              </h1>
-            </div>
+            <h1 className="text-sm font-bold">دستیار هوشمند لیارا</h1>
             <button
               aria-label="بستن تاریخچه گفتگوها"
-              className="mr-auto rounded-lg p-2 text-[#667394] transition-colors hover:bg-[#edf1fb] dark:text-white/60 dark:hover:bg-white/10 md:hidden"
+              className="mr-auto rounded-lg p-2 text-[#667394] hover:bg-[#edf1fb] dark:text-white/60 dark:hover:bg-white/10 md:hidden"
               onClick={() => setIsSidebarOpen(false)}
               type="button"
             >
-              <X aria-hidden="true" className="h-5 w-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
           <div className="mb-3 flex items-center justify-between px-2">
-            <p className="text-xs font-medium text-[#7885a5] dark:text-white/45">
-              گفتگوهای اخیر
-            </p>
+            <p className="text-xs font-medium text-[#7885a5] dark:text-white/45">گفتگوهای اخیر</p>
             <span className="rounded-full bg-[#edf1fb] px-2 py-0.5 text-[10px] text-[#7885a5] dark:bg-white/10 dark:text-white/50">
-              {visibleChats.length}
+              {chats.length}
             </span>
           </div>
-
-          <div className="space-y-1">
-            {visibleChats.map((chat) => {
-              const isActive = chat.id === activeChat.id
-
-              return (
-                <button
-                  key={chat.id}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors",
-                    isActive
-                      ? "bg-[#e7ecff] text-[#26366a] shadow-inner shadow-[#c2cdf2]/50 dark:bg-[#26366a] dark:text-white dark:shadow-white/5"
-                      : "text-[#667394] hover:bg-[#f3f6ff] hover:text-[#26366a] dark:text-white/60 dark:hover:bg-white/[0.07] dark:hover:text-white"
-                  )}
-                  onClick={() => handleSelectChat(chat.id)}
-                  type="button"
-                >
-                  <MessageSquare
-                    aria-hidden="true"
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-[#7885a5] dark:text-white/40">
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {chats.map((chat) => {
+                const isActive = chat.id === activeChatId
+                return (
+                  <button
+                    key={chat.id}
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "mt-0.5 h-4 w-4 shrink-0",
+                      "flex w-full items-start gap-3 rounded-xl px-3 py-3 text-right transition-colors",
                       isActive
-                        ? "text-[#5265cf] dark:text-white"
-                        : "text-[#a1acc6] dark:text-white/35"
+                        ? "bg-[#e7ecff] text-[#26366a] dark:bg-[#26366a] dark:text-white"
+                        : "text-[#667394] hover:bg-[#f3f6ff] dark:text-white/60 dark:hover:bg-white/[0.07]"
                     )}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {chat.title}
+                    onClick={() => handleSelectChat(chat.id)}
+                    type="button"
+                  >
+                    <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-[#6575ff]" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{chat.title}</span>
+                      <span className="mt-1 block truncate text-xs text-[#8995b3] dark:text-white/40">
+                        {getPreview(chat.messages)}
+                      </span>
                     </span>
-                    <span className="mt-1 block truncate text-xs text-[#8995b3] dark:text-white/40">
-                      {getPreview(chat.messages)}
-                    </span>
-                  </span>
-                </button>
-              )
-            })}
-            {visibleChats.length === 0 && (
-              <p className="px-2 py-4 text-center text-xs leading-6 text-[#8995b3] dark:text-white/40">
-                هنوز گفتگویی شروع نشده است.
-              </p>
-            )}
-          </div>
+                  </button>
+                )
+              })}
+              {chats.length === 0 && (
+                <p className="px-2 py-8 text-center text-xs leading-6 text-[#8995b3] dark:text-white/40">
+                  هنوز گفتگویی شروع نشده است.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="border-t border-[#e8ecf7] p-3 dark:border-white/10">
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-[#f3f6ff] p-3 dark:bg-white/[0.06]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e1e7ff] text-[#5265cf] dark:bg-white/10 dark:text-[#a7f2e5]">
+              <UserRound className="h-4 w-4" />
+            </div>
+            <span className="min-w-0 flex-1 truncate text-xs" dir="ltr">{session.user.email}</span>
+            <button
+              aria-label="خروج"
+              className="rounded-lg p-2 text-[#8995b3] hover:bg-white hover:text-red-500 dark:hover:bg-white/10"
+              onClick={onLogout}
+              type="button"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
           <button
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#5b6cff] to-[#35cfc5] px-3 py-2.5 text-sm font-semibold text-[#101a3d] shadow-lg shadow-[#2a4e9a]/30 transition-transform hover:-translate-y-0.5"
             onClick={handleCreateChat}
             type="button"
           >
-            <Plus aria-hidden="true" className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
             گفتگوی جدید
           </button>
         </div>
@@ -263,47 +363,82 @@ export function App() {
       <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-[#06091d] px-4 py-4 sm:px-8 sm:py-6">
         <button
           aria-label="تغییر پوسته"
-          className="fixed right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-[#d7def1] bg-white/85 text-[#5265cf] shadow-lg shadow-[#5265cf]/10 backdrop-blur-md transition-colors hover:bg-white dark:border-white/15 dark:bg-[#111c45]/85 dark:text-[#a7f2e5] dark:shadow-black/20 dark:hover:bg-[#1b2a5b]"
+          className="fixed right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-[#d7def1] bg-white/85 text-[#5265cf] shadow-lg backdrop-blur-md hover:bg-white dark:border-white/15 dark:bg-[#111c45]/85 dark:text-[#a7f2e5] dark:hover:bg-[#1b2a5b]"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title="تغییر پوسته"
           type="button"
         >
-          {theme === "dark" ? (
-            <Sun aria-hidden="true" className="h-4 w-4" />
-          ) : (
-            <Moon aria-hidden="true" className="h-4 w-4" />
-          )}
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
         <StarfieldBackground />
         <div className="relative flex h-full min-h-0 w-full max-w-5xl flex-col items-center gap-4">
           <div className="shrink-0 text-center">
             <div className="mb-4 flex items-center justify-center gap-2 text-xs font-medium text-[#aab9ff]">
-              <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
-              {activeChat.title}
+              <Sparkles className="h-3.5 w-3.5" />
+              {activeTitle}
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              دستیار هوشمند لیارا
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">دستیار هوشمند لیارا</h1>
             <p className="mt-3 max-w-md text-sm text-white/70">
               برای استقرار و مدیریت سرویس‌ها، سریع و ساده راهنمایی بگیرید.
             </p>
           </div>
           <AIChatCard
-            key={activeChat.id}
+            key={activeChatId ?? "draft"}
             className="min-h-0 max-h-full max-w-[720px] flex-1"
-            messages={activeChat.messages}
-            onMessagesChange={handleMessagesChange}
+            error={error}
+            isSending={isSending}
+            messages={activeMessages}
+            onSendMessage={handleSendMessage}
           />
         </div>
         <button
           aria-label="باز کردن تاریخچه گفتگوها"
-          className="fixed left-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl bg-[#5265cf] text-white shadow-xl shadow-[#5265cf]/30 transition-transform hover:-translate-y-0.5 dark:bg-[#a7f2e5] dark:text-[#0b1739] dark:shadow-[#0b1739]/30 md:hidden"
+          className="fixed left-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl bg-[#5265cf] text-white shadow-xl shadow-[#5265cf]/30 transition-transform hover:-translate-y-0.5 dark:bg-[#a7f2e5] dark:text-[#0b1739] md:hidden"
           onClick={() => setIsSidebarOpen(true)}
           type="button"
         >
-          <Menu aria-hidden="true" className="h-4 w-4" />
+          <Menu className="h-4 w-4" />
         </button>
       </section>
     </main>
   )
+}
+
+export function App() {
+  const [session, setSession] = useState<AuthSession | null>(null)
+  const [isRestoringSession, setIsRestoringSession] = useState(true)
+
+  useEffect(() => {
+    const token = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
+    if (!token) {
+      setIsRestoringSession(false)
+      return
+    }
+    getCurrentUser(token)
+      .then((user) => setSession({ accessToken: token, user }))
+      .catch(() => localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY))
+      .finally(() => setIsRestoringSession(false))
+  }, [])
+
+  const handleAuthenticated = (nextSession: AuthSession) => {
+    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, nextSession.accessToken)
+    setSession(nextSession)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    setSession(null)
+  }
+
+  if (isRestoringSession) {
+    return (
+      <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#06091d] text-[#a7f2e5]">
+        <StarfieldBackground />
+        <LoaderCircle className="relative z-10 h-8 w-8 animate-spin" />
+      </main>
+    )
+  }
+  if (!session) {
+    return <LoginScreen onAuthenticated={handleAuthenticated} />
+  }
+  return <ChatWorkspace onLogout={handleLogout} session={session} />
 }

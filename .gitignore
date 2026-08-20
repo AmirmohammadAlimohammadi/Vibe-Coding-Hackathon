@@ -21,6 +21,11 @@ downloads/
 eggs/
 .eggs/
 lib/
+!apps/web/src/lib/
+!apps/web/src/lib/**
+!packages/ui/src/lib/
+!packages/ui/src/lib/**
+.pnpm-store/
 lib64/
 parts/
 sdist/

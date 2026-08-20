@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { Send } from "lucide-react"
+import { AlertCircle, Send } from "lucide-react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
 export type ChatMessage = {
+  id?: string
   sender: "ai" | "user"
   text: string
 }
 
 type AIChatCardProps = {
   className?: string
-  messages?: ChatMessage[]
-  onMessagesChange?: (messages: ChatMessage[]) => void
+  error?: string
+  isSending?: boolean
+  messages: ChatMessage[]
+  onSendMessage: (message: string) => Promise<void>
 }
 
 type Particle = {
@@ -21,13 +24,6 @@ type Particle = {
   duration: number
   delay: number
 }
-
-const INITIAL_MESSAGES: ChatMessage[] = [
-  {
-    sender: "ai",
-    text: "👋 سلام! من دستیار هوشمند لیارا هستم. چطور می‌توانم کمکتان کنم؟",
-  },
-]
 
 const PARTICLES: Particle[] = Array.from({ length: 20 }, (_, index) => ({
   left: `${(index * 37) % 100}%`,
@@ -38,60 +34,25 @@ const PARTICLES: Particle[] = Array.from({ length: 20 }, (_, index) => ({
 
 export default function AIChatCard({
   className,
-  messages: controlledMessages,
-  onMessagesChange,
+  error,
+  isSending = false,
+  messages,
+  onSendMessage,
 }: AIChatCardProps) {
-  const [localMessages, setLocalMessages] =
-    useState<ChatMessage[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
-  const responseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const messages = controlledMessages ?? localMessages
-  const messagesRef = useRef<ChatMessage[]>(messages)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    messagesRef.current = messages
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, isSending])
 
-  useEffect(() => {
-    return () => {
-      if (responseTimeout.current) {
-        clearTimeout(responseTimeout.current)
-      }
-    }
-  }, [])
-
-  const appendMessage = (message: ChatMessage) => {
-    const nextMessages = [...messagesRef.current, message]
-    messagesRef.current = nextMessages
-
-    if (onMessagesChange) {
-      onMessagesChange(nextMessages)
-      return
-    }
-
-    setLocalMessages(nextMessages)
-  }
-
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmedInput = input.trim()
-
-    if (!trimmedInput) {
+    if (!trimmedInput || isSending) {
       return
     }
-
-    appendMessage({ sender: "user", text: trimmedInput })
     setInput("")
-    setIsTyping(true)
-
-    responseTimeout.current = setTimeout(() => {
-      appendMessage({
-        sender: "ai",
-        text: "🤖 این یک پاسخ نمونه از دستیار لیارا است.",
-      })
-      setIsTyping(false)
-      responseTimeout.current = null
-    }, 1200)
+    await onSendMessage(trimmedInput)
   }
 
   return (
@@ -108,7 +69,6 @@ export default function AIChatCard({
         animate={{ rotate: [0, 360] }}
         transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
       />
-
       <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[1.3rem] border border-[#dbe4f6] bg-white/95 shadow-2xl shadow-[#6a78b8]/20 backdrop-blur-xl dark:border-white/15 dark:bg-[#0d1738]/95 dark:shadow-[#4052a6]/20">
         <motion.div
           aria-hidden="true"
@@ -117,7 +77,6 @@ export default function AIChatCard({
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           style={{ backgroundSize: "200% 200%" }}
         />
-
         {PARTICLES.map((particle, index) => (
           <motion.div
             key={index}
@@ -133,12 +92,14 @@ export default function AIChatCard({
             style={{ left: particle.left }}
           />
         ))}
-
         <div className="relative z-10 border-b border-[#dbe4f6] px-5 py-4 dark:border-white/10">
-          <h2 className="text-lg font-semibold text-[#16224a] dark:text-white">دستیار هوشمند</h2>
-          <p className="text-xs text-[#6e7a9b] dark:text-white/50">همیشه آماده پاسخگویی</p>
+          <h2 className="text-lg font-semibold text-[#16224a] dark:text-white">
+            دستیار هوشمند
+          </h2>
+          <p className="text-xs text-[#6e7a9b] dark:text-white/50">
+            متصل به مستندات و تاریخچه گفتگوهای شما
+          </p>
         </div>
-
         <div
           aria-live="polite"
           dir="ltr"
@@ -146,11 +107,11 @@ export default function AIChatCard({
         >
           {messages.map((message, index) => (
             <motion.div
-              key={`${message.sender}-${index}`}
+              key={message.id ?? `${message.sender}-${index}`}
               dir="rtl"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
+              transition={{ duration: 0.35 }}
               className={cn(
                 "min-w-0 max-w-[82%] break-words whitespace-pre-wrap px-4 py-2.5 text-right leading-7 shadow-md backdrop-blur-md [overflow-wrap:anywhere]",
                 message.sender === "ai"
@@ -161,8 +122,7 @@ export default function AIChatCard({
               {message.text}
             </motion.div>
           ))}
-
-          {isTyping && (
+          {isSending && (
             <motion.div
               aria-label="دستیار در حال نوشتن است"
               className="flex max-w-[30%] items-center gap-1 self-start rounded-2xl bg-[#eef2ff] px-4 py-3 dark:bg-white/10"
@@ -175,13 +135,19 @@ export default function AIChatCard({
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#5b6cff] delay-400 dark:bg-[#a7f2e5]" />
             </motion.div>
           )}
+          <div ref={messagesEndRef} />
         </div>
-
+        {error && (
+          <div className="relative z-10 mx-4 mb-2 flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs leading-6 text-red-700 dark:text-red-200">
+            <AlertCircle className="mt-1 h-3.5 w-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
         <form
           className="relative z-10 flex items-center gap-2 border-t border-[#dbe4f6] p-4 dark:border-white/10"
           onSubmit={(event) => {
             event.preventDefault()
-            handleSend()
+            void handleSend()
           }}
         >
           <label className="sr-only" htmlFor="ai-chat-message">
@@ -189,23 +155,24 @@ export default function AIChatCard({
           </label>
           <textarea
             id="ai-chat-message"
-            className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto rounded-xl border border-[#cbd6ef] bg-white/70 px-4 py-2.5 text-sm leading-6 text-[#16224a] placeholder:text-[#8290b2] focus:outline-none focus:ring-2 focus:ring-[#5265cf]/40 dark:border-white/15 dark:bg-white/10 dark:text-white dark:placeholder:text-white/40 dark:focus:ring-[#a7f2e5]/60"
+            className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto rounded-xl border border-[#cbd6ef] bg-white/70 px-4 py-2.5 text-sm leading-6 text-[#16224a] placeholder:text-[#8290b2] focus:outline-none focus:ring-2 focus:ring-[#5265cf]/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/10 dark:text-white dark:placeholder:text-white/40 dark:focus:ring-[#a7f2e5]/60"
+            disabled={isSending}
             enterKeyHint="send"
-            placeholder="پیام خود را بنویسید..."
+            placeholder="سوال خود را درباره سرویس‌های لیارا بنویسید..."
             rows={1}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
-                handleSend()
+                void handleSend()
               }
             }}
           />
           <button
             aria-label="ارسال پیام"
             className="rounded-xl bg-[#5265cf] p-2.5 text-white transition-colors hover:bg-[#4052b8] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#a7f2e5] dark:text-[#0b1739] dark:hover:bg-[#c8fff5]"
-            disabled={!input.trim()}
+            disabled={!input.trim() || isSending}
             type="submit"
           >
             <Send aria-hidden="true" className="h-4 w-4" />

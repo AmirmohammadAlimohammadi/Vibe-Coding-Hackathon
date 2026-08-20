@@ -146,3 +146,17 @@ history only.
 
 For local testing without an SMTP provider, explicitly set `EMAIL_DELIVERY_MODE=console`.
 This logs OTP codes and must not be enabled in production.
+
+## Frontend
+
+The React frontend is built as a static Vite application and served by Nginx. Nginx proxies
+`/api/*` requests to the FastAPI backend, so authentication and chat requests use the same
+origin without browser CORS configuration.
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000`, enter an email address, verify the emailed OTP, and start a
+conversation. The access token is restored from browser storage, previous chats are loaded
+for the authenticated user, and new questions are sent to the persistent chat RAG endpoint.
