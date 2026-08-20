@@ -48,11 +48,15 @@ async def root() -> dict[str, str]:
 @app.post("/rag/query", response_model=RagQueryResponse, tags=["rag"])
 def query_documentation(
     request: RagQueryRequest,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> RagQueryResponse:
     try:
         service = get_rag_service()
-        state = service.query(request.question, request.max_refinements)
+        state = service.query(
+            request.question,
+            request.max_refinements,
+            expertise_level=current_user.expertise_level,
+        )
     except Exception as error:
         logger.exception("RAG query failed")
         raise HTTPException(

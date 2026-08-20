@@ -35,7 +35,40 @@ def initialize_database() -> None:
     from app.chat import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _migrate_user_expertise_level()
     _migrate_existing_chats_to_user_ownership()
+
+
+def _migrate_user_expertise_level() -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    with engine.begin() as connection:
+        if "expertise_level" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN expertise_level "
+                    "VARCHAR(20) NOT NULL DEFAULT 'intermediate'"
+                )
+            )
+        connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'ck_users_expertise_level'
+                    ) THEN
+                        ALTER TABLE users
+                        ADD CONSTRAINT ck_users_expertise_level
+                        CHECK (expertise_level IN ('beginner', 'intermediate', 'advanced'));
+                    END IF;
+                END $$;
+                """
+            )
+        )
 
 
 def _migrate_existing_chats_to_user_ownership() -> None:

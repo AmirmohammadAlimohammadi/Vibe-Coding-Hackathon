@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.auth.preferences import ExpertiseLevel
 
 
 def normalize_email(email: str) -> str:
@@ -41,3 +42,14 @@ def get_or_create_verified_user(session: Session, email: str) -> User:
 
 def get_user_by_id(session: Session, user_id: uuid.UUID) -> User | None:
     return session.scalar(select(User).where(User.id == user_id))
+
+
+def update_user_expertise_level(
+    session: Session,
+    user: User,
+    expertise_level: ExpertiseLevel,
+) -> User:
+    user.expertise_level = expertise_level.value
+    session.commit()
+    session.refresh(user)
+    return user

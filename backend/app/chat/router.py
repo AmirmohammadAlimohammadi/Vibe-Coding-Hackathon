@@ -138,6 +138,7 @@ def send_message(
             request.question,
             request.max_refinements,
             history=history,
+            expertise_level=current_user.expertise_level,
         )
         rag = serialize_rag_result(service, state)
     except Exception as error:

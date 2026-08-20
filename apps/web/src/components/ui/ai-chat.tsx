@@ -4,6 +4,8 @@ import { AlertCircle, Send } from "lucide-react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
+import { MarkdownMessage } from "./markdown-message"
+
 export type ChatMessage = {
   id?: string
   sender: "ai" | "user"
@@ -16,6 +18,7 @@ type AIChatCardProps = {
   isSending?: boolean
   messages: ChatMessage[]
   onSendMessage: (message: string) => Promise<void>
+  title: string
 }
 
 type Particle = {
@@ -38,6 +41,7 @@ export default function AIChatCard({
   isSending = false,
   messages,
   onSendMessage,
+  title,
 }: AIChatCardProps) {
   const [input, setInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -92,13 +96,16 @@ export default function AIChatCard({
             style={{ left: particle.left }}
           />
         ))}
-        <div className="relative z-10 border-b border-[#dbe4f6] px-5 py-4 dark:border-white/10">
-          <h2 className="text-lg font-semibold text-[#16224a] dark:text-white">
-            دستیار هوشمند
+        <div
+          className="relative z-10 border-b border-[#dbe4f6] px-5 py-4 text-left dark:border-white/10"
+          dir="ltr"
+        >
+          <h2
+            className="truncate text-base font-semibold text-[#16224a] dark:text-white"
+            dir="auto"
+          >
+            {title}
           </h2>
-          <p className="text-xs text-[#6e7a9b] dark:text-white/50">
-            متصل به مستندات و تاریخچه گفتگوهای شما
-          </p>
         </div>
         <div
           aria-live="polite"
@@ -113,13 +120,17 @@ export default function AIChatCard({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35 }}
               className={cn(
-                "min-w-0 max-w-[82%] break-words whitespace-pre-wrap px-4 py-2.5 text-right leading-7 shadow-md backdrop-blur-md [overflow-wrap:anywhere]",
+                "max-w-[88%] min-w-0 px-4 py-2.5 text-right leading-7 [overflow-wrap:anywhere] break-words shadow-md backdrop-blur-md",
                 message.sender === "ai"
                   ? "self-start rounded-2xl bg-[#eef2ff] text-[#26366a] dark:bg-white/10 dark:text-white"
-                  : "self-end rounded-2xl bg-[#5b6cff] font-semibold text-white dark:bg-[#a7f2e5] dark:text-[#0b1739]"
+                  : "self-end rounded-2xl bg-[#5b6cff] font-semibold whitespace-pre-wrap text-white dark:bg-[#a7f2e5] dark:text-[#0b1739]"
               )}
             >
-              {message.text}
+              {message.sender === "ai" ? (
+                <MarkdownMessage>{message.text}</MarkdownMessage>
+              ) : (
+                message.text
+              )}
             </motion.div>
           ))}
           {isSending && (
@@ -155,7 +166,7 @@ export default function AIChatCard({
           </label>
           <textarea
             id="ai-chat-message"
-            className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto rounded-xl border border-[#cbd6ef] bg-white/70 px-4 py-2.5 text-sm leading-6 text-[#16224a] placeholder:text-[#8290b2] focus:outline-none focus:ring-2 focus:ring-[#5265cf]/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/10 dark:text-white dark:placeholder:text-white/40 dark:focus:ring-[#a7f2e5]/60"
+            className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto rounded-xl border border-[#cbd6ef] bg-white/70 px-4 py-2.5 text-sm leading-6 text-[#16224a] placeholder:text-[#8290b2] focus:ring-2 focus:ring-[#5265cf]/40 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/10 dark:text-white dark:placeholder:text-white/40 dark:focus:ring-[#a7f2e5]/60"
             disabled={isSending}
             enterKeyHint="send"
             placeholder="سوال خود را درباره سرویس‌های لیارا بنویسید..."

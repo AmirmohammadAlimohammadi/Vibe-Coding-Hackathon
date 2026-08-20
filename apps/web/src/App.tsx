@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   LoaderCircle,
   LogOut,
+  GraduationCap,
   Menu,
   MessageSquare,
   Moon,
   Plus,
-  Sparkles,
   Sun,
   UserRound,
   X,
@@ -24,8 +24,11 @@ import {
   getCurrentUser,
   listChats,
   sendChatMessage,
+  updateCurrentUserPreferences,
   type AuthSession,
   type ChatMessageRecord,
+  type ExpertiseLevel,
+  type User,
 } from "@/lib/api"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -41,6 +44,28 @@ const WELCOME_MESSAGE: ChatMessage = {
   sender: "ai",
   text: "👋 سلام! من دستیار هوشمند لیارا هستم. چطور می‌توانم کمکتان کنم؟",
 }
+
+const EXPERTISE_OPTIONS: Array<{
+  value: ExpertiseLevel
+  label: string
+  description: string
+}> = [
+  {
+    value: "beginner",
+    label: "مبتدی",
+    description: "توضیح ساده و قدم‌به‌قدم",
+  },
+  {
+    value: "intermediate",
+    label: "متوسط",
+    description: "پاسخ کاربردی با جزئیات لازم",
+  },
+  {
+    value: "advanced",
+    label: "حرفه‌ای",
+    description: "جزئیات فنی، محدودیت‌ها و ملاحظات",
+  },
+]
 
 function mapMessage(message: ChatMessageRecord): ChatMessage {
   return {
@@ -71,9 +96,14 @@ function messageFromError(error: unknown) {
 type ChatWorkspaceProps = {
   session: AuthSession
   onLogout: () => void
+  onUserUpdate: (user: User) => void
 }
 
-function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
+function ChatWorkspace({
+  session,
+  onLogout,
+  onUserUpdate,
+}: ChatWorkspaceProps) {
   const { theme, setTheme } = useTheme()
   const [chats, setChats] = useState<ChatHistory[]>([])
   const [draftMessages, setDraftMessages] = useState<ChatMessage[]>([
@@ -83,6 +113,7 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
+  const [isUpdatingExpertise, setIsUpdatingExpertise] = useState(false)
   const [error, setError] = useState("")
 
   const activeChat = useMemo(
@@ -92,13 +123,16 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
   const activeMessages = activeChat?.messages ?? draftMessages
   const activeTitle = activeChat?.title ?? "گفتگوی جدید"
 
-  const handleApiError = (apiError: unknown) => {
-    if (apiError instanceof ApiError && apiError.status === 401) {
-      onLogout()
-      return
-    }
-    setError(messageFromError(apiError))
-  }
+  const handleApiError = useCallback(
+    (apiError: unknown) => {
+      if (apiError instanceof ApiError && apiError.status === 401) {
+        onLogout()
+        return
+      }
+      setError(messageFromError(apiError))
+    },
+    [onLogout]
+  )
 
   const loadChat = async (chatId: string) => {
     const currentChat = chats.find((chat) => chat.id === chatId)
@@ -150,7 +184,10 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
                       ...chat,
                       title: detail.title,
                       loaded: true,
-                      messages: [WELCOME_MESSAGE, ...detail.messages.map(mapMessage)],
+                      messages: [
+                        WELCOME_MESSAGE,
+                        ...detail.messages.map(mapMessage),
+                      ],
                     }
                   : chat
               )
@@ -171,13 +208,35 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
     return () => {
       active = false
     }
-  }, [session.accessToken])
+  }, [handleApiError, session.accessToken])
 
   const handleCreateChat = () => {
     setActiveChatId(null)
     setDraftMessages([WELCOME_MESSAGE])
     setError("")
     setIsSidebarOpen(false)
+  }
+
+  const handleExpertiseChange = async (expertiseLevel: ExpertiseLevel) => {
+    if (
+      expertiseLevel === session.user.expertise_level ||
+      isUpdatingExpertise
+    ) {
+      return
+    }
+    setIsUpdatingExpertise(true)
+    setError("")
+    try {
+      const user = await updateCurrentUserPreferences(
+        session.accessToken,
+        expertiseLevel
+      )
+      onUserUpdate(user)
+    } catch (updateError) {
+      handleApiError(updateError)
+    } finally {
+      setIsUpdatingExpertise(false)
+    }
   }
 
   const handleSelectChat = (chatId: string) => {
@@ -208,7 +267,10 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
           { sender: "user", text: question } satisfies ChatMessage,
         ]
         setDraftMessages(optimisticMessages)
-        const created = await createChat(session.accessToken, getTitle(question))
+        const created = await createChat(
+          session.accessToken,
+          getTitle(question)
+        )
         targetChatId = created.id
         setChats((current) => [
           {
@@ -247,11 +309,11 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
   return (
     <main
       dir="rtl"
-      className="flex h-svh max-h-svh flex-col overflow-hidden bg-[#f6f8ff] text-[#152044] dark:bg-[#080d1e] dark:text-white md:flex-row-reverse"
+      className="flex h-svh max-h-svh flex-col overflow-hidden bg-[#f6f8ff] text-[#152044] md:flex-row-reverse dark:bg-[#080d1e] dark:text-white"
     >
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[70] flex h-svh w-[min(88vw,20rem)] shrink-0 flex-col border-r border-[#dbe2f5] bg-white text-[#152044] shadow-2xl transition-transform duration-300 dark:border-[#26366a] dark:bg-[#111c45] dark:text-white md:static md:z-auto md:h-full md:w-80 md:translate-x-0 md:shadow-none",
+          "fixed inset-y-0 left-0 z-[70] flex h-svh w-[min(88vw,20rem)] shrink-0 flex-col border-r border-[#dbe2f5] bg-white text-[#152044] shadow-2xl transition-transform duration-300 md:static md:z-auto md:h-full md:w-80 md:translate-x-0 md:shadow-none dark:border-[#26366a] dark:bg-[#111c45] dark:text-white",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -264,12 +326,16 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
               rel="noreferrer"
               target="_blank"
             >
-              <img alt="لیارا" className="h-7 w-auto" src="https://liara.ir/assets/images/liara-logo.svg" />
+              <img
+                alt="لیارا"
+                className="h-7 w-auto"
+                src="https://liara.ir/assets/images/liara-logo.svg"
+              />
             </a>
             <h1 className="text-sm font-bold">دستیار هوشمند لیارا</h1>
             <button
               aria-label="بستن تاریخچه گفتگوها"
-              className="mr-auto rounded-lg p-2 text-[#667394] hover:bg-[#edf1fb] dark:text-white/60 dark:hover:bg-white/10 md:hidden"
+              className="mr-auto rounded-lg p-2 text-[#667394] hover:bg-[#edf1fb] md:hidden dark:text-white/60 dark:hover:bg-white/10"
               onClick={() => setIsSidebarOpen(false)}
               type="button"
             >
@@ -280,7 +346,9 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
           <div className="mb-3 flex items-center justify-between px-2">
-            <p className="text-xs font-medium text-[#7885a5] dark:text-white/45">گفتگوهای اخیر</p>
+            <p className="text-xs font-medium text-[#7885a5] dark:text-white/45">
+              گفتگوهای اخیر
+            </p>
             <span className="rounded-full bg-[#edf1fb] px-2 py-0.5 text-[10px] text-[#7885a5] dark:bg-white/10 dark:text-white/50">
               {chats.length}
             </span>
@@ -308,7 +376,9 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
                   >
                     <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-[#6575ff]" />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{chat.title}</span>
+                      <span className="block truncate text-sm font-medium">
+                        {chat.title}
+                      </span>
                       <span className="mt-1 block truncate text-xs text-[#8995b3] dark:text-white/40">
                         {getPreview(chat.messages)}
                       </span>
@@ -326,11 +396,52 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
         </div>
 
         <div className="border-t border-[#e8ecf7] p-3 dark:border-white/10">
+          <div className="mb-3 rounded-xl border border-[#e1e7f5] bg-[#f8faff] p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-2.5 flex items-center gap-2 text-xs font-semibold text-[#536185] dark:text-white/70">
+              <GraduationCap className="h-4 w-4 text-[#5265cf] dark:text-[#a7f2e5]" />
+              سطح پاسخ‌ها
+              {isUpdatingExpertise && (
+                <LoaderCircle className="mr-auto h-3.5 w-3.5 animate-spin" />
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-[#e9eefb] p-1 dark:bg-black/20">
+              {EXPERTISE_OPTIONS.map((option) => {
+                const isSelected = session.user.expertise_level === option.value
+                return (
+                  <button
+                    key={option.value}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "rounded-md px-1.5 py-2 text-[11px] font-medium transition-all disabled:cursor-wait disabled:opacity-60",
+                      isSelected
+                        ? "bg-white text-[#3549aa] shadow-sm dark:bg-[#26366a] dark:text-[#a7f2e5]"
+                        : "text-[#7582a3] hover:text-[#3549aa] dark:text-white/45 dark:hover:text-white"
+                    )}
+                    disabled={isUpdatingExpertise}
+                    onClick={() => void handleExpertiseChange(option.value)}
+                    title={option.description}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-[10px] leading-5 text-[#8995b3] dark:text-white/35">
+              {
+                EXPERTISE_OPTIONS.find(
+                  (option) => option.value === session.user.expertise_level
+                )?.description
+              }
+            </p>
+          </div>
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-[#f3f6ff] p-3 dark:bg-white/[0.06]">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e1e7ff] text-[#5265cf] dark:bg-white/10 dark:text-[#a7f2e5]">
               <UserRound className="h-4 w-4" />
             </div>
-            <span className="min-w-0 flex-1 truncate text-xs" dir="ltr">{session.user.email}</span>
+            <span className="min-w-0 flex-1 truncate text-xs" dir="ltr">
+              {session.user.email}
+            </span>
             <button
               aria-label="خروج"
               className="rounded-lg p-2 text-[#8995b3] hover:bg-white hover:text-red-500 dark:hover:bg-white/10"
@@ -354,45 +465,40 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
       {isSidebarOpen && (
         <button
           aria-label="بستن تاریخچه گفتگوها"
-          className="fixed inset-0 z-[60] cursor-default bg-[#08102a]/40 backdrop-blur-md dark:bg-black/45 md:hidden"
+          className="fixed inset-0 z-[60] cursor-default bg-[#08102a]/40 backdrop-blur-md md:hidden dark:bg-black/45"
           onClick={() => setIsSidebarOpen(false)}
           type="button"
         />
       )}
 
-      <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-[#06091d] px-4 py-4 sm:px-8 sm:py-6">
+      <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-[#06091d] p-3 sm:p-5 lg:p-7">
         <button
           aria-label="تغییر پوسته"
-          className="fixed right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-[#d7def1] bg-white/85 text-[#5265cf] shadow-lg backdrop-blur-md hover:bg-white dark:border-white/15 dark:bg-[#111c45]/85 dark:text-[#a7f2e5] dark:hover:bg-[#1b2a5b]"
+          className="fixed top-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-[#d7def1] bg-white/85 text-[#5265cf] shadow-lg backdrop-blur-md hover:bg-white dark:border-white/15 dark:bg-[#111c45]/85 dark:text-[#a7f2e5] dark:hover:bg-[#1b2a5b]"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           type="button"
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "dark" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
         </button>
         <StarfieldBackground />
-        <div className="relative flex h-full min-h-0 w-full max-w-5xl flex-col items-center gap-4">
-          <div className="shrink-0 text-center">
-            <div className="mb-4 flex items-center justify-center gap-2 text-xs font-medium text-[#aab9ff]">
-              <Sparkles className="h-3.5 w-3.5" />
-              {activeTitle}
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">دستیار هوشمند لیارا</h1>
-            <p className="mt-3 max-w-md text-sm text-white/70">
-              برای استقرار و مدیریت سرویس‌ها، سریع و ساده راهنمایی بگیرید.
-            </p>
-          </div>
+        <div className="relative flex h-full min-h-0 w-full max-w-[1400px] items-stretch justify-center">
           <AIChatCard
             key={activeChatId ?? "draft"}
-            className="min-h-0 max-h-full max-w-[720px] flex-1"
+            className="max-h-full min-h-0 max-w-none flex-1"
             error={error}
             isSending={isSending}
             messages={activeMessages}
             onSendMessage={handleSendMessage}
+            title={activeTitle}
           />
         </div>
         <button
           aria-label="باز کردن تاریخچه گفتگوها"
-          className="fixed left-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl bg-[#5265cf] text-white shadow-xl shadow-[#5265cf]/30 transition-transform hover:-translate-y-0.5 dark:bg-[#a7f2e5] dark:text-[#0b1739] md:hidden"
+          className="fixed top-4 left-4 z-30 flex h-11 w-11 items-center justify-center rounded-xl bg-[#5265cf] text-white shadow-xl shadow-[#5265cf]/30 transition-transform hover:-translate-y-0.5 md:hidden dark:bg-[#a7f2e5] dark:text-[#0b1739]"
           onClick={() => setIsSidebarOpen(true)}
           type="button"
         >
@@ -405,12 +511,13 @@ function ChatWorkspace({ session, onLogout }: ChatWorkspaceProps) {
 
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null)
-  const [isRestoringSession, setIsRestoringSession] = useState(true)
+  const [isRestoringSession, setIsRestoringSession] = useState(() =>
+    Boolean(localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY))
+  )
 
   useEffect(() => {
     const token = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
     if (!token) {
-      setIsRestoringSession(false)
       return
     }
     getCurrentUser(token)
@@ -424,9 +531,13 @@ export function App() {
     setSession(nextSession)
   }
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
     setSession(null)
+  }, [])
+
+  const handleUserUpdate = (user: User) => {
+    setSession((current) => (current ? { ...current, user } : current))
   }
 
   if (isRestoringSession) {
@@ -440,5 +551,11 @@ export function App() {
   if (!session) {
     return <LoginScreen onAuthenticated={handleAuthenticated} />
   }
-  return <ChatWorkspace onLogout={handleLogout} session={session} />
+  return (
+    <ChatWorkspace
+      onLogout={handleLogout}
+      onUserUpdate={handleUserUpdate}
+      session={session}
+    />
+  )
 }

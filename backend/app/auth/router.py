@@ -9,12 +9,17 @@ from app.auth.dependencies import get_current_user
 from app.auth.email import EmailDeliveryError, get_email_sender
 from app.auth.models import User
 from app.auth.otp import OtpRateLimitError, OtpVerificationResult, get_otp_store
-from app.auth.repository import get_or_create_verified_user, normalize_email
+from app.auth.repository import (
+    get_or_create_verified_user,
+    normalize_email,
+    update_user_expertise_level,
+)
 from app.auth.schemas import (
     AccessTokenResponse,
     EmailCodeRequest,
     EmailCodeSentResponse,
     EmailCodeVerifyRequest,
+    UserPreferencesUpdateRequest,
     UserResponse,
 )
 from app.auth.tokens import get_access_token_service
@@ -101,3 +106,17 @@ def verify_email_code(
 @router.get("/me", response_model=UserResponse)
 def read_current_user(current_user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_current_user_preferences(
+    payload: UserPreferencesUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_database_session),
+) -> UserResponse:
+    user = update_user_expertise_level(
+        session,
+        current_user,
+        payload.expertise_level,
+    )
+    return UserResponse.model_validate(user)

@@ -5,9 +5,12 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(
 
 export const ACCESS_TOKEN_STORAGE_KEY = "liara-assistant-access-token"
 
+export type ExpertiseLevel = "beginner" | "intermediate" | "advanced"
+
 export type User = {
   id: string
   email: string
+  expertise_level: ExpertiseLevel
   email_verified_at: string
   created_at: string
   last_login_at: string
@@ -96,13 +99,14 @@ async function apiRequest<T>(
 }
 
 export async function requestEmailCode(email: string) {
-  return apiRequest<{ message: string; expires_in: number; retry_after: number }>(
-    "/auth/email/request",
-    {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }
-  )
+  return apiRequest<{
+    message: string
+    expires_in: number
+    retry_after: number
+  }>("/auth/email/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  })
 }
 
 export async function verifyEmailCode(email: string, code: string) {
@@ -126,6 +130,17 @@ export function getCurrentUser(token: string) {
   return apiRequest<User>("/auth/me", { token })
 }
 
+export function updateCurrentUserPreferences(
+  token: string,
+  expertiseLevel: ExpertiseLevel
+) {
+  return apiRequest<User>("/auth/me", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ expertise_level: expertiseLevel }),
+  })
+}
+
 export function listChats(token: string) {
   return apiRequest<ChatSummary[]>("/chats", { token })
 }
@@ -142,7 +157,11 @@ export function createChat(token: string, title: string) {
   })
 }
 
-export function sendChatMessage(token: string, chatId: string, question: string) {
+export function sendChatMessage(
+  token: string,
+  chatId: string,
+  question: string
+) {
   return apiRequest<ChatTurn>(`/chats/${chatId}/messages`, {
     method: "POST",
     token,

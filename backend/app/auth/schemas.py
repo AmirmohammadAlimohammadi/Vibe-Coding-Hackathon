@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.auth.preferences import ExpertiseLevel
+
 
 class EmailCodeRequest(BaseModel):
     email: EmailStr
@@ -26,9 +28,14 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: EmailStr
+    expertise_level: ExpertiseLevel
     email_verified_at: datetime
     created_at: datetime
     last_login_at: datetime
+
+
+class UserPreferencesUpdateRequest(BaseModel):
+    expertise_level: ExpertiseLevel
 
 
 class AccessTokenResponse(BaseModel):
