@@ -92,3 +92,28 @@ curl -X POST http://localhost:8000/rag/query \
 The LangGraph workflow runs hybrid retrieval, grades whether the evidence is sufficient,
 and can refine and retry the search query up to two times before `gpt-5.6-terra` generates
 a grounded answer with sources.
+
+## Persistent chats and memory
+
+Chat history is stored in PostgreSQL using two tables:
+
+- `chats`: UUID, title, creation time, and last-update time.
+- `chat_messages`: UUID, chat UUID, role, ordered position, content, timestamps, and JSONB
+  metadata containing the model, retrieval attempts, evidence status, and sources.
+
+The backend creates the tables during application startup. Create and select a chat through
+Swagger, then send all messages for that conversation to its message endpoint:
+
+```text
+POST   /chats
+GET    /chats
+GET    /chats/{chat_id}
+PATCH  /chats/{chat_id}
+DELETE /chats/{chat_id}
+POST   /chats/{chat_id}/messages
+```
+
+For each new turn, the backend loads recent messages from the selected chat, rewrites
+context-dependent follow-up questions into standalone retrieval queries, and gives the
+conversation history to the grading and answer-generation steps. The memory window is
+bounded by `CHAT_MEMORY_MESSAGES` and `CHAT_MEMORY_MAX_CHARS`.
