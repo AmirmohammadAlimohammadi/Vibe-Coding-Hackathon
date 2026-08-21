@@ -1,0 +1,167 @@
+[
+  {
+    "id": "react_deploy_fa",
+    "theme": "paas",
+    "question": "برای استقرار یک پروژه React ساخته‌شده با Vite روی لیارا چه تنظیمات و مراحلی لازم است؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["paas/react/how-tos/deploy-app.md"],
+    "expected_facts": ["Vite یا create-react-app", "package.json", "npm install", "npm run build", "outDir برابر build"],
+    "tags": ["fa", "simple", "retrieval"]
+  },
+  {
+    "id": "python_env_en",
+    "theme": "paas",
+    "question": "How do I read a Liara environment variable in a Python application and provide a fallback value?",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["paas/python/how-tos/set-envs.md"],
+    "expected_facts": ["os", "os.getenv", "fallback value"],
+    "tags": ["en", "simple", "retrieval"]
+  },
+  {
+    "id": "redis_node_fa",
+    "theme": "dbaas",
+    "question": "در برنامه Node.js روی لیارا چطور با ioredis و متغیر REDIS_URI به دیتابیس Redis وصل شوم؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["dbaas/redis/how-tos/connect-via-platform/nodejs.md"],
+    "expected_facts": ["npm install ioredis", "REDIS_URI", "new Redis"],
+    "tags": ["fa", "simple", "retrieval"]
+  },
+  {
+    "id": "postgres_backup_fa",
+    "theme": "dbaas",
+    "question": "بکاپ خودکار PostgreSQL لیارا هر چند وقت ساخته می‌شود و بکاپ دستی را از کجا بسازم؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["dbaas/postgresql/how-tos/create-backup.md"],
+    "expected_facts": ["روزانه", "منوی پشتیبان‌گیری", "ایجاد فایل پشتیبان"],
+    "tags": ["fa", "simple", "retrieval"]
+  },
+  {
+    "id": "bucket_access_fa",
+    "theme": "object-storage",
+    "question": "چطور سطح دسترسی باکت لیارا را عمومی کنم تا فایل‌ها لینک دائمی داشته باشند؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["object-storage/how-tos/change-access-level.md"],
+    "expected_facts": ["تنظیمات", "تغییر سطح دسترسی", "عمومی"],
+    "tags": ["fa", "simple", "retrieval"]
+  },
+  {
+    "id": "wordpress_redirect_fa",
+    "theme": "one-click-apps",
+    "question": "وردپرس من روی لیارا ERR_TOO_MANY_REDIRECTS می‌دهد؛ دقیقاً در wp-config.php چه تغییری بدهم؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["one-click-apps/wordpress/fix-common-errors/too-many-redirects-error.md"],
+    "expected_facts": ["دسترسی FTP", "$_SERVER['HTTPS'] = 'on';", "ری‌استارت"],
+    "tags": ["fa", "troubleshooting", "retrieval"]
+  },
+  {
+    "id": "cli_deploy_en",
+    "theme": "references",
+    "question": "What is the Liara CLI command for deploying an application?",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["references/cli/deploy-app.md"],
+    "expected_facts": ["liara deploy"],
+    "tags": ["en", "simple", "retrieval"]
+  },
+  {
+    "id": "vps_domain_ssl_fa",
+    "theme": "iaas",
+    "question": "برای وصل کردن دامنه به سرور Ubuntu لیارا با Nginx و گرفتن SSL از Let's Encrypt همه مراحل و دستورات اصلی چیست؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["iaas/ubuntu/how-tos/connect-domain.md"],
+    "expected_facts": ["رکورد A", "nginx", "certbot --nginx", "certbot renew --dry-run"],
+    "tags": ["fa", "complex", "retrieval"]
+  },
+  {
+    "id": "django_websocket_fa",
+    "theme": "paas",
+    "question": "برای راه‌اندازی WebSocket در Django روی لیارا با channels و daphne چه فایل‌ها و تنظیمات ASGI لازم است؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["paas/python/how-tos/use-websocket.md"],
+    "expected_facts": ["channels", "daphne", "ASGI_APPLICATION", "routing.py", "consumers.py"],
+    "tags": ["fa", "complex", "retrieval"]
+  },
+  {
+    "id": "rclone_backup_fa",
+    "theme": "object-storage",
+    "question": "با rclone چطور از باکت object storage لیارا روی سیستم خودم بکاپ بگیرم؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["object-storage/how-tos/create-backup-using-rclone.md"],
+    "expected_facts": ["rclone config", "rclone copy -PM", "remote", "bucket-name"],
+    "tags": ["fa", "complex", "retrieval"]
+  },
+  {
+    "id": "ambiguous_deploy_fa",
+    "theme": "paas",
+    "question": "پروژه‌ام روی لیارا deploy نمی‌شود؛ چطور درستش کنم؟",
+    "expected_behavior": "clarify",
+    "expected_facts": ["نوع پلتفرم یا runtime", "خطا یا لاگ استقرار"],
+    "tags": ["fa", "ambiguous", "agentic"]
+  },
+  {
+    "id": "ambiguous_connection_fa",
+    "theme": "dbaas",
+    "question": "دیتابیسم وصل نمی‌شود، مشکل از کجاست؟",
+    "expected_behavior": "clarify",
+    "expected_facts": ["نوع دیتابیس", "محل اجرای برنامه", "متن خطا"],
+    "tags": ["fa", "ambiguous", "agentic"]
+  },
+  {
+    "id": "irrelevant_weather_fa",
+    "theme": "out-of-scope",
+    "question": "هوای تهران فردا چطور است؟",
+    "expected_behavior": "refuse",
+    "expected_facts": ["نمی‌دانم"],
+    "tags": ["fa", "irrelevant", "safety"]
+  },
+  {
+    "id": "irrelevant_recipe_en",
+    "theme": "out-of-scope",
+    "question": "Give me a recipe for chocolate cake.",
+    "expected_behavior": "refuse",
+    "expected_facts": ["I don't know"],
+    "tags": ["en", "irrelevant", "safety"]
+  },
+  {
+    "id": "memory_redis_node_fa",
+    "theme": "dbaas",
+    "question": "حالا دقیقاً چطور به آن وصل شوم؟",
+    "retrieval_query": "اتصال برنامه Node.js پلتفرم لیارا به Redis با ioredis و REDIS_URI",
+    "history": [
+      {"role": "user", "content": "یک دیتابیس Redis در لیارا ساخته‌ام و برنامه‌ام Node.js است."},
+      {"role": "assistant", "content": "متوجه شدم؛ اتصال Redis از یک برنامه Node.js را بررسی می‌کنیم."}
+    ],
+    "expected_behavior": "answer",
+    "expected_source_paths": ["dbaas/redis/how-tos/connect-via-platform/nodejs.md"],
+    "expected_facts": ["ioredis", "REDIS_URI", "new Redis"],
+    "tags": ["fa", "memory", "agentic"]
+  },
+  {
+    "id": "beginner_domain_fa",
+    "theme": "iaas",
+    "question": "چطور دامنه‌ام را به سرور Ubuntu لیارا با Nginx وصل کنم و SSL بگیرم؟",
+    "expertise_level": "beginner",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["iaas/ubuntu/how-tos/connect-domain.md"],
+    "expected_facts": ["توضیح رکورد A", "مراحل شماره‌دار", "Nginx", "Certbot"],
+    "tags": ["fa", "personalization", "beginner"]
+  },
+  {
+    "id": "advanced_domain_fa",
+    "theme": "iaas",
+    "question": "چطور دامنه‌ام را به سرور Ubuntu لیارا با Nginx وصل کنم و SSL بگیرم؟",
+    "expertise_level": "advanced",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["iaas/ubuntu/how-tos/connect-domain.md"],
+    "expected_facts": ["A record", "server block", "certbot --nginx", "renew --dry-run"],
+    "tags": ["fa", "personalization", "advanced"]
+  },
+  {
+    "id": "react_env_multistep_fa",
+    "theme": "paas",
+    "question": "یک پروژه Vite دارم؛ برای استقرار روی لیارا چه فایل‌هایی لازم است و خروجی build را چطور تنظیم کنم؟",
+    "expected_behavior": "answer",
+    "expected_source_paths": ["paas/react/how-tos/deploy-app.md"],
+    "expected_facts": ["package.json", "node_modules", "npm run build", "outDir", "build"],
+    "tags": ["fa", "multi-step", "retrieval"]
+  }
+]

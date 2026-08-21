@@ -44,10 +44,14 @@ export default function AIChatCard({
   title,
 }: AIChatCardProps) {
   const [input, setInput] = useState("")
-  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const container = messagesContainerRef.current
+    if (!container) {
+      return
+    }
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
   }, [messages, isSending])
 
   const handleSend = async () => {
@@ -63,16 +67,10 @@ export default function AIChatCard({
     <div
       dir="rtl"
       className={cn(
-        "relative flex h-full min-h-0 w-full max-w-[720px] overflow-hidden rounded-[1.4rem] p-[2px]",
+        "relative flex h-full min-h-0 w-full max-w-[720px] overflow-hidden rounded-[1.4rem] border border-[#6c7dff]/50 bg-[#6c7dff]/10 p-px shadow-[0_0_28px_rgba(91,108,255,0.14)]",
         className
       )}
     >
-      <motion.div
-        aria-hidden="true"
-        className="absolute inset-0 rounded-[1.4rem] border-2 border-[#6c7dff]/50"
-        animate={{ rotate: [0, 360] }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-      />
       <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[1.3rem] border border-[#dbe4f6] bg-white/95 shadow-2xl shadow-[#6a78b8]/20 backdrop-blur-xl dark:border-white/15 dark:bg-[#0d1738]/95 dark:shadow-[#4052a6]/20">
         <motion.div
           aria-hidden="true"
@@ -108,6 +106,7 @@ export default function AIChatCard({
           </h2>
         </div>
         <div
+          ref={messagesContainerRef}
           aria-live="polite"
           dir="ltr"
           className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4 text-sm"
@@ -146,7 +145,6 @@ export default function AIChatCard({
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#5b6cff] delay-400 dark:bg-[#a7f2e5]" />
             </motion.div>
           )}
-          <div ref={messagesEndRef} />
         </div>
         {error && (
           <div className="relative z-10 mx-4 mb-2 flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs leading-6 text-red-700 dark:text-red-200">
@@ -155,7 +153,7 @@ export default function AIChatCard({
           </div>
         )}
         <form
-          className="relative z-10 flex items-center gap-2 border-t border-[#dbe4f6] p-4 dark:border-white/10"
+          className="relative z-10 flex items-center gap-2 border-t border-[#dbe4f6] px-3 pt-2 pb-2 dark:border-white/10"
           onSubmit={(event) => {
             event.preventDefault()
             void handleSend()

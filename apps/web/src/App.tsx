@@ -332,7 +332,7 @@ function ChatWorkspace({
                 src="https://liara.ir/assets/images/liara-logo.svg"
               />
             </a>
-            <h1 className="text-sm font-bold">دستیار هوشمند لیارا</h1>
+            <h1 className="text-sm font-bold"></h1>
             <button
               aria-label="بستن تاریخچه گفتگوها"
               className="mr-auto rounded-lg p-2 text-[#667394] hover:bg-[#edf1fb] md:hidden dark:text-white/60 dark:hover:bg-white/10"
