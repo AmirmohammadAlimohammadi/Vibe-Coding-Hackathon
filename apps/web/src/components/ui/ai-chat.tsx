@@ -10,6 +10,7 @@ export type ChatMessage = {
   id?: string
   sender: "ai" | "user"
   text: string
+  isStreaming?: boolean
 }
 
 type AIChatCardProps = {
@@ -51,7 +52,10 @@ export default function AIChatCard({
     if (!container) {
       return
     }
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: isSending ? "auto" : "smooth",
+    })
   }, [messages, isSending])
 
   const handleSend = async () => {
@@ -126,13 +130,23 @@ export default function AIChatCard({
               )}
             >
               {message.sender === "ai" ? (
-                <MarkdownMessage>{message.text}</MarkdownMessage>
+                <div aria-label={message.isStreaming ? "دستیار در حال نوشتن است" : undefined}>
+                  {message.text && (
+                    <MarkdownMessage>{message.text}</MarkdownMessage>
+                  )}
+                  {message.isStreaming && (
+                    <span
+                      aria-hidden="true"
+                      className="mr-1 inline-block h-5 w-0.5 animate-pulse align-middle bg-[#5b6cff] dark:bg-[#a7f2e5]"
+                    />
+                  )}
+                </div>
               ) : (
                 message.text
               )}
             </motion.div>
           ))}
-          {isSending && (
+          {isSending && !messages.some((message) => message.isStreaming) && (
             <motion.div
               aria-label="دستیار در حال نوشتن است"
               className="flex max-w-[30%] items-center gap-1 self-start rounded-2xl bg-[#eef2ff] px-4 py-3 dark:bg-white/10"

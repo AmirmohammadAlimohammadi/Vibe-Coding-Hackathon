@@ -23,7 +23,7 @@ import {
   getChat,
   getCurrentUser,
   listChats,
-  sendChatMessage,
+  streamChatMessage,
   updateCurrentUserPreferences,
   type AuthSession,
   type ChatMessageRecord,
@@ -256,6 +256,25 @@ function ChatWorkspace({
     )
   }
 
+  const updateChatMessage = (
+    chatId: string,
+    messageId: string,
+    update: (message: ChatMessage) => ChatMessage
+  ) => {
+    setChats((current) =>
+      current.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              messages: chat.messages.map((message) =>
+                message.id === messageId ? update(message) : message
+              ),
+            }
+          : chat
+      )
+    )
+  }
+
   const handleSendMessage = async (question: string) => {
     setIsSending(true)
     setError("")
@@ -293,13 +312,51 @@ function ChatWorkspace({
         )
       }
 
-      const turn = await sendChatMessage(
+      const streamingChatId = targetChatId
+      const streamingMessageId = `stream-${crypto.randomUUID()}`
+      appendToChat(streamingChatId, {
+        id: streamingMessageId,
+        sender: "ai",
+        text: "",
+        isStreaming: true,
+      })
+      let streamedText = ""
+      const turn = await streamChatMessage(
         session.accessToken,
-        targetChatId,
-        question
+        streamingChatId,
+        question,
+        {
+          onToken: (content) => {
+            streamedText += content
+            updateChatMessage(
+              streamingChatId,
+              streamingMessageId,
+              (message) => ({
+                ...message,
+                text: streamedText,
+              })
+            )
+          },
+        }
       )
-      appendToChat(targetChatId, mapMessage(turn.assistant_message))
+      updateChatMessage(streamingChatId, streamingMessageId, () =>
+        mapMessage(turn.assistant_message)
+      )
     } catch (sendError) {
+      if (targetChatId) {
+        setChats((current) =>
+          current.map((chat) =>
+            chat.id === targetChatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.filter(
+                    (message) => !message.isStreaming
+                  ),
+                }
+              : chat
+          )
+        )
+      }
       handleApiError(sendError)
     } finally {
       setIsSending(false)

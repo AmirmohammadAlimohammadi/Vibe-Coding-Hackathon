@@ -48,6 +48,16 @@ export type ChatTurn = {
   assistant_message: ChatMessageRecord
 }
 
+export type StreamedChatTurn = {
+  assistant_message: ChatMessageRecord
+  rag: Record<string, unknown>
+}
+
+type ChatStreamCallbacks = {
+  onStatus?: (status: string) => void
+  onToken: (content: string) => void
+}
+
 type ApiErrorPayload = {
   detail?: string
 }
@@ -167,4 +177,99 @@ export function sendChatMessage(
     token,
     body: JSON.stringify({ question, max_refinements: 2 }),
   })
+}
+
+export async function streamChatMessage(
+  token: string,
+  chatId: string,
+  question: string,
+  callbacks: ChatStreamCallbacks
+): Promise<StreamedChatTurn> {
+  const response = await fetch(
+    `${API_BASE_URL}/chats/${chatId}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ question, max_refinements: 2 }),
+    }
+  )
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | ApiErrorPayload
+      | null
+    throw new ApiError(
+      response.status,
+      payload?.detail ?? "ارتباط با سرور با مشکل مواجه شد. دوباره تلاش کنید."
+    )
+  }
+  if (!response.body) {
+    throw new ApiError(502, "مرورگر نتوانست پاسخ زنده را دریافت کند.")
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let completedTurn: StreamedChatTurn | null = null
+
+  const processFrame = (frame: string) => {
+    if (!frame.trim()) {
+      return
+    }
+    let eventName = "message"
+    const dataLines: string[] = []
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice(6).trim()
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart())
+      }
+    }
+    if (!dataLines.length) {
+      return
+    }
+
+    const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>
+    if (eventName === "token" && typeof payload.content === "string") {
+      callbacks.onToken(payload.content)
+    } else if (eventName === "status" && typeof payload.status === "string") {
+      callbacks.onStatus?.(payload.status)
+    } else if (eventName === "done") {
+      completedTurn = payload as StreamedChatTurn
+    } else if (eventName === "error") {
+      throw new ApiError(
+        502,
+        typeof payload.detail === "string"
+          ? payload.detail
+          : "پاسخ زنده با خطا متوقف شد."
+      )
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer = (buffer + decoder.decode(value, { stream: !done })).replace(
+      /\r\n/g,
+      "\n"
+    )
+    let boundary = buffer.indexOf("\n\n")
+    while (boundary !== -1) {
+      processFrame(buffer.slice(0, boundary))
+      buffer = buffer.slice(boundary + 2)
+      boundary = buffer.indexOf("\n\n")
+    }
+    if (done) {
+      break
+    }
+  }
+  processFrame(buffer)
+
+  if (!completedTurn) {
+    throw new ApiError(502, "پاسخ زنده پیش از تکمیل متوقف شد.")
+  }
+  return completedTurn
 }

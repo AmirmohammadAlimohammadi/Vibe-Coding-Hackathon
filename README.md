@@ -111,7 +111,12 @@ GET    /chats/{chat_id}
 PATCH  /chats/{chat_id}
 DELETE /chats/{chat_id}
 POST   /chats/{chat_id}/messages
+POST   /chats/{chat_id}/messages/stream
 ```
+
+The streaming endpoint uses authenticated Server-Sent Events. It emits `status`, `token`,
+`done`, and `error` events; the frontend appends every `token` event immediately and
+replaces the temporary message with the persisted assistant message after `done`.
 
 For each new turn, the backend loads recent messages from the selected chat, rewrites
 context-dependent follow-up questions into standalone retrieval queries, and gives the

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterator
 from typing import Literal, TypedDict
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -160,6 +161,28 @@ def message_text(message) -> str:
         return text.strip()
     content = getattr(message, "content", "")
     return content.strip() if isinstance(content, str) else str(content).strip()
+
+
+def stream_chunk_text(message) -> str:
+    text = getattr(message, "text", None)
+    if callable(text):
+        text = text()
+    if isinstance(text, str):
+        return text
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                block_text = block.get("text")
+                if isinstance(block_text, str):
+                    parts.append(block_text)
+        return "".join(parts)
+    return ""
 
 
 def localized_unknown(question: str) -> str:
@@ -322,20 +345,98 @@ class AgenticRagService:
     def _answer(self, state: RagState) -> dict:
         if not state["relevant"]:
             return {"answer": localized_unknown(state["question"])}
+        response = self.llm.invoke(self._answer_messages(state))
+        return {"answer": message_text(response)}
+
+    def _answer_messages(self, state: RagState):
         evidence_status = "sufficient" if state["sufficient"] else "insufficient"
         intent_status = "relevant" if state["relevant"] else "irrelevant"
-        response = self.llm.invoke(
-            ANSWER_PROMPT.format_messages(
-                question=state["question"],
-                history=self._history(state["history"]),
-                intent_status=intent_status,
-                evidence_status=evidence_status,
-                expertise_level=state["expertise_level"].value,
-                expertise_guidance=EXPERTISE_GUIDANCE[state["expertise_level"]],
-                context=self._context(state["documents"]),
+        return ANSWER_PROMPT.format_messages(
+            question=state["question"],
+            history=self._history(state["history"]),
+            intent_status=intent_status,
+            evidence_status=evidence_status,
+            expertise_level=state["expertise_level"].value,
+            expertise_guidance=EXPERTISE_GUIDANCE[state["expertise_level"]],
+            context=self._context(state["documents"]),
+        )
+
+    def _initial_state(
+        self,
+        question: str,
+        max_refinements: int,
+        history: list[ConversationMessage],
+        expertise_level: ExpertiseLevel,
+    ) -> RagState:
+        return {
+            "question": question,
+            "expertise_level": expertise_level,
+            "history": history,
+            "search_query": question,
+            "max_refinements": max_refinements,
+            "documents": [],
+            "attempts": [],
+            "proposed_query": "",
+            "action": "refine",
+            "relevant": True,
+            "sufficient": False,
+            "reason": "",
+            "answer": "",
+        }
+
+    @staticmethod
+    def _normalized_expertise(
+        expertise_level: ExpertiseLevel | str,
+    ) -> ExpertiseLevel:
+        try:
+            return ExpertiseLevel(expertise_level)
+        except ValueError:
+            return DEFAULT_EXPERTISE_LEVEL
+
+    def _prepare_state(self, state: RagState) -> RagState:
+        state.update(self._contextualize(state))
+        while True:
+            state.update(self._retrieve(state))
+            state.update(self._grade(state))
+            if self._route_after_grade(state) == "answer":
+                return state
+            state.update(self._rewrite(state))
+
+    def stream_query(
+        self,
+        question: str,
+        max_refinements: int,
+        history: list[ConversationMessage] | None = None,
+        expertise_level: ExpertiseLevel | str = DEFAULT_EXPERTISE_LEVEL,
+    ) -> Iterator[dict[str, object]]:
+        normalized_expertise = self._normalized_expertise(expertise_level)
+        state = self._prepare_state(
+            self._initial_state(
+                question,
+                max_refinements,
+                history or [],
+                normalized_expertise,
             )
         )
-        return {"answer": message_text(response)}
+        if not state["relevant"]:
+            answer = localized_unknown(question)
+            state["answer"] = answer
+            yield {"type": "token", "content": answer}
+            yield {"type": "done", "state": state}
+            return
+
+        answer_parts: list[str] = []
+        for chunk in self.llm.stream(self._answer_messages(state)):
+            content = stream_chunk_text(chunk)
+            if not content:
+                continue
+            answer_parts.append(content)
+            yield {"type": "token", "content": content}
+        answer = "".join(answer_parts).strip()
+        if not answer:
+            raise RuntimeError("The language model returned an empty streamed response")
+        state["answer"] = answer
+        yield {"type": "done", "state": state}
 
     def query(
         self,
@@ -344,24 +445,12 @@ class AgenticRagService:
         history: list[ConversationMessage] | None = None,
         expertise_level: ExpertiseLevel | str = DEFAULT_EXPERTISE_LEVEL,
     ) -> RagState:
-        try:
-            normalized_expertise = ExpertiseLevel(expertise_level)
-        except ValueError:
-            normalized_expertise = DEFAULT_EXPERTISE_LEVEL
+        normalized_expertise = self._normalized_expertise(expertise_level)
         return self.graph.invoke(
-            {
-                "question": question,
-                "expertise_level": normalized_expertise,
-                "history": history or [],
-                "search_query": question,
-                "max_refinements": max_refinements,
-                "documents": [],
-                "attempts": [],
-                "proposed_query": "",
-                "action": "refine",
-                "relevant": True,
-                "sufficient": False,
-                "reason": "",
-                "answer": "",
-            }
+            self._initial_state(
+                question,
+                max_refinements,
+                history or [],
+                normalized_expertise,
+            )
         )
