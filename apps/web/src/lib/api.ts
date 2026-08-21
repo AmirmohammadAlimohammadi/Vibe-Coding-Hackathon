@@ -165,6 +165,6 @@ export function sendChatMessage(
   return apiRequest<ChatTurn>(`/chats/${chatId}/messages`, {
     method: "POST",
     token,
-    body: JSON.stringify({ question, max_refinements: 1 }),
+    body: JSON.stringify({ question, max_refinements: 2 }),
   })
 }

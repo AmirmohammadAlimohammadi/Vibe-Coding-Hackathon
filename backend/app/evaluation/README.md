@@ -8,7 +8,7 @@ This suite measures the parts of chatbot quality that can be tested before produ
 - conversation-memory and expertise-personalization behavior;
 - optional 1–5 LLM-judge scores for correctness, relevance, completeness,
   groundedness, and personalization;
-- actual provider tokens, LLM/embedding calls, cache hits, retrieval strategy, and latency.
+- search count, estimated LLM calls, and answer length as cost proxies.
 
 Run the cheap retrieval baseline first:
 
@@ -24,10 +24,6 @@ docker compose exec backend python -m app.evaluation.run --mode full --limit 8
 
 Add `--judge` for rubric-based answer scoring, or select cases with `--case CASE_ID`
 and `--tag TAG`. Save machine-readable results with `--output /tmp/report.json`.
-
-Run `python -m unittest app.evaluation.test_optimizations` inside the backend container to
-verify combined-call routing, contextualization gating, usage extraction, and sparse gating.
-Run retrieval twice to measure cold behavior and Redis cache hits separately.
 
 Suggested release gates:
 

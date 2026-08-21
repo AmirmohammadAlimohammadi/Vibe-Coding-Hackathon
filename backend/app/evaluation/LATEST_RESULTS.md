@@ -36,19 +36,3 @@ cases are too few for a stable tail-latency estimate and one answer had a slow r
 The optional LLM-judge run did not complete because the Avalai account returned
 `insufficient_quota`. Correctness, completeness, groundedness, relevance, and personalization
 scores therefore remain unreported rather than estimated.
-
-## Cost-optimized retrieval
-
-Nine technical golden queries were evaluated after enabling conservative sparse-first search.
-
-| Metric | Cold sparse run | Warm Redis run |
-| --- | ---: | ---: |
-| Hit@8 | 100% | 100% |
-| Paid embedding requests | 0 | 0 |
-| Retrieval cache hit rate | 0% | 100% |
-| Latency p50 | 5.22 ms | 0.63 ms |
-| Latency p95 | 19.49 ms | 2.53 ms |
-
-The combined decision-and-answer graph, Nano/Mini/Terra routing, answer cache, and actual token
-telemetry are covered by deterministic tests. A new full semantic benchmark still requires
-Avalai credit; the current account remains below the provider's minimum request cost.

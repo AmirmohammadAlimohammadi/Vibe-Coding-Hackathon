@@ -50,7 +50,7 @@ class ChatDetailResponse(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
-    max_refinements: int = Field(default=1, ge=0, le=1)
+    max_refinements: int = Field(default=2, ge=0, le=2)
 
 
 class ChatTurnResponse(BaseModel):

@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tag", action="append", dest="tags")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--top-k", type=int, default=8)
-    parser.add_argument("--max-refinements", type=int, default=1)
+    parser.add_argument("--max-refinements", type=int, default=2)
     parser.add_argument("--judge", action="store_true")
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -168,7 +168,7 @@ def judge_response(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     source_text = service._context(state["documents"])
-    response = service.answer_llms[service.simple_model_name].invoke(
+    response = service.llm.invoke(
         JUDGE_PROMPT.format_messages(
             question=case["question"],
             expected_behavior=case["expected_behavior"],
@@ -196,8 +196,7 @@ def run_retrieval(cases: list[dict[str, Any]], top_k: int) -> dict[str, Any]:
         query = case.get("retrieval_query", case["question"])
         started = time.perf_counter()
         try:
-            retrieval = retriever.search(query, limit=top_k)
-            documents = retrieval.documents
+            documents = retriever.search(query, limit=top_k)
         except Exception as error:
             latency_ms = (time.perf_counter() - started) * 1000
             results.append(
@@ -229,10 +228,6 @@ def run_retrieval(cases: list[dict[str, Any]], top_k: int) -> dict[str, Any]:
             "first_relevant_rank": rank,
             "reciprocal_rank": round(1 / rank, 4) if rank else 0.0,
             "latency_ms": round(latency_ms, 2),
-            "retrieval_strategy": retrieval.cached_strategy or retrieval.strategy,
-            "retrieval_cache_hit": retrieval.retrieval_cache_hit,
-            "embedding_cache_hit": retrieval.embedding_cache_hit,
-            "embedding_request_made": retrieval.embedding_request_made,
             "sources": source_snapshot(documents),
         }
         results.append(result)
@@ -256,18 +251,6 @@ def run_retrieval(cases: list[dict[str, Any]], top_k: int) -> dict[str, Any]:
             ),
             "latency_ms_p50": round(percentile(latencies, 0.5), 2),
             "latency_ms_p95": round(percentile(latencies, 0.95), 2),
-            "embedding_request_rate": rate(
-                sum(result.get("embedding_request_made", False) for result in results),
-                len(results),
-            ),
-            "retrieval_cache_hit_rate": rate(
-                sum(result.get("retrieval_cache_hit", False) for result in results),
-                len(results),
-            ),
-            "sparse_only_rate": rate(
-                sum(result.get("retrieval_strategy") == "sparse" for result in results),
-                len(results),
-            ),
             "theme_coverage": {
                 theme: rate(sum(item["hit"] for item in items), len(items))
                 for theme, items in sorted(theme_results.items())
@@ -333,15 +316,11 @@ def run_full(
             "first_relevant_rank": rank,
             "latency_ms": round(latency_ms, 2),
             "search_count": len(state["attempts"]),
-            "estimated_llm_calls": state["usage"]["llm_calls"],
-            "input_tokens": state["usage"]["input_tokens"],
-            "output_tokens": state["usage"]["output_tokens"],
-            "total_tokens": state["usage"]["total_tokens"],
-            "embedding_calls": state["usage"]["embedding_calls"],
-            "response_cache_hit": state["response_cache_hit"],
-            "retrieval_strategy": state["retrieval_strategy"],
-            "contextualized": state["contextualized"],
-            "models_used": state["models_used"],
+            "estimated_llm_calls": (
+                len(state["attempts"])
+                + int(state["relevant"])
+                + int(bool(case.get("history")))
+            ),
             "answer_characters": len(state["answer"]),
             "final_search_query": state["search_query"],
             "attempts": state["attempts"],
@@ -385,13 +364,6 @@ def run_full(
             sum(result["search_count"] for result in results) / len(results), 2
         ),
         "estimated_llm_calls": sum(result["estimated_llm_calls"] for result in results),
-        "input_tokens": sum(result.get("input_tokens", 0) for result in results),
-        "output_tokens": sum(result.get("output_tokens", 0) for result in results),
-        "total_tokens": sum(result.get("total_tokens", 0) for result in results),
-        "embedding_calls": sum(result.get("embedding_calls", 0) for result in results),
-        "response_cache_hits": sum(
-            result.get("response_cache_hit", False) for result in results
-        ),
         "error_rate": rate(sum("error" in result for result in results), len(results)),
         "judge_error_rate": rate(
             sum("judge_error" in result for result in results), len(results)

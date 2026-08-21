@@ -11,11 +11,6 @@ from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.database import close_database, initialize_database
 from app.retrieval.api import RagQueryRequest, RagQueryResponse, serialize_rag_result
-from app.retrieval.cost_control import (
-    RagBudgetExceededError,
-    RagRateLimitError,
-    get_rag_cost_guard,
-)
 from app.retrieval.dependencies import get_rag_service
 
 
@@ -55,16 +50,6 @@ def query_documentation(
     request: RagQueryRequest,
     current_user: User = Depends(get_current_user),
 ) -> RagQueryResponse:
-    guard = get_rag_cost_guard()
-    used_tokens = 0
-    try:
-        lease = guard.acquire(str(current_user.id))
-    except (RagRateLimitError, RagBudgetExceededError) as error:
-        raise HTTPException(
-            status_code=429,
-            detail=str(error),
-            headers={"Retry-After": str(error.retry_after)},
-        ) from error
     try:
         service = get_rag_service()
         state = service.query(
@@ -72,27 +57,11 @@ def query_documentation(
             request.max_refinements,
             expertise_level=current_user.expertise_level,
         )
-        used_tokens = state["usage"]["total_tokens"]
-        logger.info(
-            "rag_query user_id=%s action=%s model=%s strategy=%s cache_hit=%s "
-            "llm_calls=%s embedding_calls=%s total_tokens=%s",
-            current_user.id,
-            state["action"],
-            state["model_name"],
-            state["retrieval_strategy"],
-            state["response_cache_hit"],
-            state["usage"]["llm_calls"],
-            state["usage"]["embedding_calls"],
-            state["usage"]["total_tokens"],
-        )
     except Exception as error:
         logger.exception("RAG query failed")
         raise HTTPException(
             status_code=502,
             detail="The documentation retrieval service is temporarily unavailable.",
         ) from error
-    finally:
-        guard.settle_tokens(lease, used_tokens)
-        guard.release(lease)
 
     return serialize_rag_result(service, state)
