@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from qdrant_client import QdrantClient
 
 from app.ingestion.index_documents import DEFAULT_COLLECTION
+from app.qdrant import create_qdrant_client
 
 
 def load_environment() -> None:
@@ -36,10 +36,7 @@ def main() -> int:
     if args.limit < 1:
         raise ValueError("--limit must be at least 1")
 
-    client = QdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-        timeout=30,
-    )
+    client = create_qdrant_client(timeout=30)
     if not client.collection_exists(args.collection):
         raise RuntimeError(f"Qdrant collection {args.collection!r} does not exist")
 

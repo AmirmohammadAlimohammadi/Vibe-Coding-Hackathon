@@ -165,3 +165,11 @@ docker compose up --build
 Open `http://localhost:3000`, enter an email address, verify the emailed OTP, and start a
 conversation. The access token is restored from browser storage, previous chats are loaded
 for the authenticated user, and new questions are sent to the persistent chat RAG endpoint.
+
+## Deploy to Liara
+
+Liara does not run this repository's Docker Compose stack directly. The production root
+`Dockerfile` packages React and FastAPI into one GitHub-deployable application, while Liara
+managed PostgreSQL and Redis and a separate disk-backed Qdrant application provide storage.
+
+Follow the complete migration and deployment checklist in `deploy/liara/README.md`.

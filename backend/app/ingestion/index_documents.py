@@ -16,6 +16,7 @@ from openai import OpenAI, RateLimitError
 from qdrant_client import QdrantClient, models
 
 from app.ingestion.chunker import Chunk, MarkdownChunker
+from app.qdrant import create_qdrant_client
 from app.retrieval.sparse import SPARSE_ENCODING_VERSION, payload_search_text, sparse_vector
 
 
@@ -242,7 +243,7 @@ def main() -> int:
         timeout=float(os.getenv("AVALAI_EMBEDDING_TIMEOUT", "60")),
         max_retries=0,
     )
-    qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=60)
+    qdrant = create_qdrant_client(timeout=60)
     ensure_collection(qdrant, args.collection, args.dimensions)
     limiter = RequestRateLimiter(args.requests_per_minute)
 

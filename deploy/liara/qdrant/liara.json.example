@@ -1,0 +1,11 @@
+{
+  "app": "replace-with-qdrant-app-id",
+  "image": "qdrant/qdrant:v1.15.3",
+  "port": 6333,
+  "disks": [
+    {
+      "name": "qdrant-data",
+      "mountTo": "/qdrant/storage"
+    }
+  ]
+}

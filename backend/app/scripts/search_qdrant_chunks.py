@@ -6,7 +6,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from qdrant_client import QdrantClient
 
 from app.ingestion.index_documents import (
     DEFAULT_COLLECTION,
@@ -14,6 +13,7 @@ from app.ingestion.index_documents import (
     DEFAULT_MODEL,
     DENSE_VECTOR_NAME,
 )
+from app.qdrant import create_qdrant_client
 
 
 def load_environment() -> None:
@@ -77,10 +77,7 @@ def main() -> int:
             f"received {len(query_vector)} dimensions"
         )
 
-    qdrant = QdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-        timeout=30,
-    )
+    qdrant = create_qdrant_client(timeout=30)
     if not qdrant.collection_exists(args.collection):
         raise RuntimeError(f"Qdrant collection {args.collection!r} does not exist")
 

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from qdrant_client import QdrantClient, models
+from qdrant_client import models
 
 from app.ingestion.index_documents import (
     DEFAULT_COLLECTION,
@@ -14,6 +14,7 @@ from app.ingestion.index_documents import (
     SPARSE_VECTOR_NAME,
     ensure_collection,
 )
+from app.qdrant import create_qdrant_client
 from app.retrieval.sparse import SPARSE_ENCODING_VERSION, payload_search_text, sparse_vector
 
 
@@ -61,10 +62,7 @@ def main() -> int:
     if args.source == args.target:
         raise ValueError("Source and target collection names must be different")
 
-    client = QdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-        timeout=60,
-    )
+    client = create_qdrant_client(timeout=60)
     if not client.collection_exists(args.source):
         raise RuntimeError(f"Source collection {args.source!r} does not exist")
     ensure_collection(client, args.target, args.dimensions)

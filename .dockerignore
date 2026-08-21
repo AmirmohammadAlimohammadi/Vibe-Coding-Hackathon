@@ -5,5 +5,4 @@
 !**/.env.example
 **/node_modules
 **/dist
-backend
 llms

@@ -100,6 +100,30 @@ services:
     entrypoint: ["python", "-m", "app.scripts.inspect_qdrant_chunks"]
     command: []
 
+  export-qdrant-snapshot:
+    build:
+      context: ./backend
+    profiles: ["tools"]
+    env_file:
+      - ./backend/.env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: liara_documentation_hybrid
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      qdrant-healthcheck:
+        condition: service_healthy
+    entrypoint:
+      [
+        "python",
+        "-m",
+        "app.scripts.export_qdrant_snapshot",
+        "--output-dir",
+        "/backups",
+      ]
+    command: []
+
   search-chunks:
     build:
       context: ./backend

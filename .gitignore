@@ -220,6 +220,10 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Local deployment backups
+backups/*
+!backups/.gitkeep
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

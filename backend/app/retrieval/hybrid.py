@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 
 from langchain_openai import OpenAIEmbeddings
-from qdrant_client import QdrantClient, models
+from qdrant_client import models
 
 from app.ingestion.index_documents import (
     DEFAULT_COLLECTION,
@@ -13,6 +13,7 @@ from app.ingestion.index_documents import (
     DENSE_VECTOR_NAME,
     SPARSE_VECTOR_NAME,
 )
+from app.qdrant import create_qdrant_client
 from app.retrieval.sparse import sparse_vector
 
 
@@ -58,10 +59,7 @@ class HybridRetriever:
             max_retries=1,
             check_embedding_ctx_length=False,
         )
-        self.qdrant = QdrantClient(
-            url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-            timeout=30,
-        )
+        self.qdrant = create_qdrant_client(timeout=30)
 
     def search(
         self,
