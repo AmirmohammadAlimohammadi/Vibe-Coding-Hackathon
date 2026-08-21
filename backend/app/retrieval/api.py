@@ -7,7 +7,7 @@ from app.retrieval.agentic_rag import AgenticRagService, RagState, SearchAttempt
 
 class RagQueryRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
-    max_refinements: int = Field(default=2, ge=0, le=2)
+    max_refinements: int = Field(default=1, ge=0, le=1)
 
 
 class RagSource(BaseModel):
@@ -23,8 +23,15 @@ class RagSource(BaseModel):
 class RagQueryResponse(BaseModel):
     answer: str
     model: str
+    models_used: list[str]
+    action: str
+    intent_relevant: bool
     final_search_query: str
     evidence_sufficient: bool
+    retrieval_strategy: str
+    response_cache_hit: bool
+    contextualized: bool
+    usage: dict[str, int]
     attempts: list[SearchAttempt]
     sources: list[RagSource]
 
@@ -47,9 +54,16 @@ def serialize_rag_result(
     ]
     return RagQueryResponse(
         answer=state["answer"],
-        model=service.model_name,
+        model=state["model_name"],
+        models_used=state["models_used"],
+        action=state["action"],
+        intent_relevant=state["relevant"],
         final_search_query=state["search_query"],
         evidence_sufficient=state["sufficient"],
+        retrieval_strategy=state["retrieval_strategy"],
+        response_cache_hit=state["response_cache_hit"],
+        contextualized=state["contextualized"],
+        usage=state["usage"],
         attempts=state["attempts"],
         sources=sources,
     )

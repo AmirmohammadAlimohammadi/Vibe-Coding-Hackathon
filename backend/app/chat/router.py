@@ -22,6 +22,11 @@ from app.chat.schemas import (
 )
 from app.database import get_database_session
 from app.retrieval.api import serialize_rag_result
+from app.retrieval.cost_control import (
+    RagBudgetExceededError,
+    RagRateLimitError,
+    get_rag_cost_guard,
+)
 from app.retrieval.dependencies import get_rag_service
 
 
@@ -119,19 +124,37 @@ def send_message(
         session,
         current_user.id,
         chat_id,
-        limit=int(os.getenv("CHAT_MEMORY_MESSAGES", "20")),
-        max_chars=int(os.getenv("CHAT_MEMORY_MAX_CHARS", "16000")),
+        limit=int(os.getenv("CHAT_MEMORY_MESSAGES", "6")),
+        max_chars=int(os.getenv("CHAT_MEMORY_MAX_CHARS", "6000")),
     )
-    user_message = repository.append_message(
-        session,
-        current_user.id,
-        chat_id,
-        MessageRole.USER,
-        request.question,
-    )
+    guard = get_rag_cost_guard()
+    try:
+        lease = guard.acquire(str(current_user.id))
+    except (RagRateLimitError, RagBudgetExceededError) as error:
+        raise HTTPException(
+            status_code=429,
+            detail=str(error),
+            headers={"Retry-After": str(error.retry_after)},
+        ) from error
+
+    try:
+        user_message = repository.append_message(
+            session,
+            current_user.id,
+            chat_id,
+            MessageRole.USER,
+            request.question,
+        )
+    except Exception:
+        guard.settle_tokens(lease, 0)
+        guard.release(lease)
+        raise
     if user_message is None:
+        guard.settle_tokens(lease, 0)
+        guard.release(lease)
         raise HTTPException(status_code=404, detail="Chat not found")
 
+    used_tokens = 0
     try:
         service = get_rag_service()
         state = service.query(
@@ -141,12 +164,33 @@ def send_message(
             expertise_level=current_user.expertise_level,
         )
         rag = serialize_rag_result(service, state)
+        used_tokens = state["usage"]["total_tokens"]
+        logger.info(
+            "rag_turn user_id=%s chat_id=%s action=%s model=%s strategy=%s "
+            "cache_hit=%s contextualized=%s llm_calls=%s embedding_calls=%s "
+            "input_tokens=%s output_tokens=%s total_tokens=%s",
+            current_user.id,
+            chat_id,
+            state["action"],
+            state["model_name"],
+            state["retrieval_strategy"],
+            state["response_cache_hit"],
+            state["contextualized"],
+            state["usage"]["llm_calls"],
+            state["usage"]["embedding_calls"],
+            state["usage"]["input_tokens"],
+            state["usage"]["output_tokens"],
+            state["usage"]["total_tokens"],
+        )
     except Exception as error:
         logger.exception("Chat RAG query failed for chat %s", chat_id)
         raise HTTPException(
             status_code=502,
             detail="The documentation retrieval service is temporarily unavailable.",
         ) from error
+    finally:
+        guard.settle_tokens(lease, used_tokens)
+        guard.release(lease)
 
     assistant_message = repository.append_message(
         session,

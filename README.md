@@ -86,12 +86,19 @@ Open Swagger UI at <http://localhost:8000/docs> and call `POST /rag/query`, or u
 ```bash
 curl -X POST http://localhost:8000/rag/query \
   -H "Content-Type: application/json" \
-  -d '{"question":"چطور خطای Multiple Settings Files جنگو را رفع کنم؟","max_refinements":2}'
+  -H "Authorization: Bearer <access-token>" \
+  -d '{"question":"چطور خطای Multiple Settings Files جنگو را رفع کنم؟","max_refinements":1}'
 ```
 
-The LangGraph workflow runs hybrid retrieval, grades whether the evidence is sufficient,
-and can refine and retry the search query up to two times before `gpt-5.6-terra` generates
-a grounded answer with sources.
+The optimized LangGraph workflow combines grading and answer generation in one call. It
+uses `gpt-5-mini` for ordinary questions, reserves `gpt-5.6-terra` for complex requests,
+and uses `gpt-5-nano` only when a context-dependent follow-up must be rewritten. One query
+refinement is allowed before the assistant asks for missing details.
+
+Redis caches exact history-free answers, retrieval results, and query embeddings. Distinctive
+technical queries use local Qdrant sparse search without requesting a paid embedding; other
+queries retain hybrid semantic and keyword retrieval. See `backend/COST_OPTIMIZATION.md` for
+budgets, cache invalidation, telemetry, and configuration.
 
 ## Persistent chats and memory
 
@@ -113,10 +120,9 @@ DELETE /chats/{chat_id}
 POST   /chats/{chat_id}/messages
 ```
 
-For each new turn, the backend loads recent messages from the selected chat, rewrites
-context-dependent follow-up questions into standalone retrieval queries, and gives the
-conversation history to the grading and answer-generation steps. The memory window is
-bounded by `CHAT_MEMORY_MESSAGES` and `CHAT_MEMORY_MAX_CHARS`.
+For each new turn, the backend loads a bounded recent-memory window. Standalone questions
+skip query rewriting entirely; only context-dependent follow-ups use the lightweight router.
+The default memory window is six messages and 6,000 characters.
 
 ## Email OTP authentication
 
