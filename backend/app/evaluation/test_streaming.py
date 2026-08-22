@@ -5,7 +5,12 @@ import unittest
 from types import SimpleNamespace
 
 from app.chat.router import server_sent_event
-from app.retrieval.agentic_rag import AgenticRagService, ExpertiseLevel, stream_chunk_text
+from app.retrieval.agentic_rag import (
+    AgenticRagService,
+    ExpertiseLevel,
+    consecutive_clarification_count,
+    stream_chunk_text,
+)
 
 
 class FakeStreamingModel:
@@ -16,6 +21,28 @@ class FakeStreamingModel:
 
 
 class StreamingTests(unittest.TestCase):
+    def test_counts_consecutive_clarification_rounds(self):
+        history = [
+            {"role": "assistant", "content": "Answer", "clarification": False},
+            {"role": "user", "content": "Question"},
+            {"role": "assistant", "content": "Which runtime?", "clarification": True},
+            {"role": "user", "content": "Node.js"},
+            {"role": "assistant", "content": "Which version?", "clarification": True},
+            {"role": "user", "content": "20"},
+        ]
+
+        self.assertEqual(consecutive_clarification_count(history), 2)
+
+    def test_final_answer_resets_clarification_rounds(self):
+        history = [
+            {"role": "assistant", "content": "Which runtime?", "clarification": True},
+            {"role": "user", "content": "Node.js"},
+            {"role": "assistant", "content": "Final answer", "clarification": False},
+            {"role": "user", "content": "A new question"},
+        ]
+
+        self.assertEqual(consecutive_clarification_count(history), 0)
+
     def test_stream_chunk_text_preserves_token_whitespace(self):
         self.assertEqual(stream_chunk_text(SimpleNamespace(content=" next")), " next")
         self.assertEqual(

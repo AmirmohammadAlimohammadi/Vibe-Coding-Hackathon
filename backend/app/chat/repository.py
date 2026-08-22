@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -132,7 +133,7 @@ def get_chat_memory(
     *,
     limit: int,
     max_chars: int,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     statement = (
         select(ChatMessage)
         .join(Chat, Chat.id == ChatMessage.chat_id)
@@ -141,11 +142,22 @@ def get_chat_memory(
         .limit(limit)
     )
     messages = list(reversed(session.scalars(statement).all()))
-    memory: list[dict[str, str]] = []
+    memory: list[dict[str, Any]] = []
     used_chars = 0
     for message in reversed(messages):
         if memory and used_chars + len(message.content) > max_chars:
             break
-        memory.append({"role": message.role.value, "content": message.content})
+        memory_message = {"role": message.role.value, "content": message.content}
+        if message.role == MessageRole.ASSISTANT:
+            attempts = message.details.get("attempts", [])
+            last_action = attempts[-1].get("action") if attempts else None
+            memory_message["clarification"] = message.details.get(
+                "clarification",
+                bool(
+                    not message.details.get("evidence_sufficient", True)
+                    and last_action not in {None, "refuse"}
+                ),
+            )
+        memory.append(memory_message)
         used_chars += len(message.content)
     return list(reversed(memory))

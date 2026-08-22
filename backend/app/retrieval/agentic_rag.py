@@ -79,14 +79,17 @@ Follow this response policy exactly:
   in the user's language. Do not answer from general knowledge.
 - If intent is relevant and evidence is sufficient, answer in the user's language, be
   direct and technically precise, and cite supporting sources as [Source N].
-- If intent is relevant but evidence is insufficient, do not guess and do not give a
-  partial answer, general troubleshooting advice, or factual guidance. Ask one focused
-  follow-up question for the missing details
-  most likely to produce a definitive answer, such as the Liara service, runtime/version,
-  exact error, current configuration, or desired outcome. You may request up to three
-  closely related details as a short list when necessary.
+- If intent is relevant, evidence is insufficient, and the clarification budget is
+  available, ask one focused follow-up message containing at most three closely related
+  questions. Request only decisive missing details such as the Liara service,
+  runtime/version, exact error, current configuration, or desired outcome.
+- If intent is relevant, evidence is insufficient, and the clarification budget is
+  exhausted, do not ask another question. Give the most useful answer possible from the
+  available facts. Clearly label necessary assumptions, distinguish confirmed steps from
+  uncertain ones, include safe verification steps, and avoid inventing platform facts.
 - Do not repeat a question already answered in chat history. If no meaningful unanswered
-  detail remains, reply with the concise equivalent of "I don't know" instead of looping.
+  detail remains before the budget is exhausted, provide the best possible answer instead
+  of looping.
 
 Return only valid GitHub-Flavored Markdown. Do not add HTML and do not wrap the entire
 answer in a code fence. Use short headings when they improve readability, lists for steps
@@ -104,6 +107,8 @@ Do not omit security warnings, required prerequisites, or critical steps for any
             "Chat history:\n{history}\n\nQuestion:\n{question}"
             "\n\nIntent status: {intent_status}"
             "\n\nEvidence status: {evidence_status}"
+            "\nClarification rounds already used: {clarification_count} of {max_clarifications}"
+            "\nClarification budget: {clarification_budget}"
             "\n\nInternal context:\n{context}",
         ),
     ]
@@ -118,15 +123,18 @@ class SearchAttempt(TypedDict):
     result_count: int
 
 
-class ConversationMessage(TypedDict):
+class ConversationMessage(TypedDict, total=False):
     role: str
     content: str
+    clarification: bool
 
 
 class RagState(TypedDict):
     question: str
     expertise_level: ExpertiseLevel
     history: list[ConversationMessage]
+    clarification_count: int
+    max_clarifications: int
     search_query: str
     max_refinements: int
     documents: list[RetrievedChunk]
@@ -189,6 +197,17 @@ def localized_unknown(question: str) -> str:
     if re.search(r"[\u0600-\u06ff]", question):
         return "نمی‌دانم."
     return "I don't know."
+
+
+def consecutive_clarification_count(history: list[ConversationMessage]) -> int:
+    count = 0
+    for message in reversed(history):
+        if message.get("role") != "assistant":
+            continue
+        if not message.get("clarification", False):
+            break
+        count += 1
+    return count
 
 
 class AgenticRagService:
@@ -351,11 +370,19 @@ class AgenticRagService:
     def _answer_messages(self, state: RagState):
         evidence_status = "sufficient" if state["sufficient"] else "insufficient"
         intent_status = "relevant" if state["relevant"] else "irrelevant"
+        clarification_budget_exhausted = (
+            state["clarification_count"] >= state["max_clarifications"]
+        )
         return ANSWER_PROMPT.format_messages(
             question=state["question"],
             history=self._history(state["history"]),
             intent_status=intent_status,
             evidence_status=evidence_status,
+            clarification_count=state["clarification_count"],
+            max_clarifications=state["max_clarifications"],
+            clarification_budget=(
+                "exhausted" if clarification_budget_exhausted else "available"
+            ),
             expertise_level=state["expertise_level"].value,
             expertise_guidance=EXPERTISE_GUIDANCE[state["expertise_level"]],
             context=self._context(state["documents"]),
@@ -372,6 +399,10 @@ class AgenticRagService:
             "question": question,
             "expertise_level": expertise_level,
             "history": history,
+            "clarification_count": consecutive_clarification_count(history),
+            "max_clarifications": max(
+                0, int(os.getenv("RAG_MAX_CLARIFICATION_ROUNDS", "2"))
+            ),
             "search_query": question,
             "max_refinements": max_refinements,
             "documents": [],

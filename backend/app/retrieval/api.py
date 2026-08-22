@@ -25,6 +25,7 @@ class RagQueryResponse(BaseModel):
     model: str
     final_search_query: str
     evidence_sufficient: bool
+    clarification: bool
     attempts: list[SearchAttempt]
     sources: list[RagSource]
 
@@ -50,6 +51,11 @@ def serialize_rag_result(
         model=service.model_name,
         final_search_query=state["search_query"],
         evidence_sufficient=state["sufficient"],
+        clarification=bool(
+            state["relevant"]
+            and not state["sufficient"]
+            and state["clarification_count"] < state["max_clarifications"]
+        ),
         attempts=state["attempts"],
         sources=sources,
     )
