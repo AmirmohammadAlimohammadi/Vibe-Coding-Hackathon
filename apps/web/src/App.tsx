@@ -86,6 +86,11 @@ function getTitle(message: string) {
   return message.length > 34 ? `${message.slice(0, 34)}…` : message
 }
 
+function createStreamingMessageId() {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  return `stream-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+}
+
 function messageFromError(error: unknown) {
   if (error instanceof ApiError) {
     return error.message
@@ -313,7 +318,7 @@ function ChatWorkspace({
       }
 
       const streamingChatId = targetChatId
-      const streamingMessageId = `stream-${crypto.randomUUID()}`
+      const streamingMessageId = createStreamingMessageId()
       appendToChat(streamingChatId, {
         id: streamingMessageId,
         sender: "ai",
